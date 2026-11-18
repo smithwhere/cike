@@ -13,7 +13,7 @@ permissions:
 jobs:
   build-dmg:
     if: github.repository == 'smithwhere/cike' && github.ref == 'refs/heads/main'
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
