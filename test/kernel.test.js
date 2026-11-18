@@ -45,12 +45,13 @@ test('window extension capability cannot read the general API, expires, and reje
   } finally { await new Promise(resolve => server.close(resolve)); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('window bridge uses a private IPv4 loopback listener and exposes only the scoped window endpoint', async () => {
+test('window bridge uses a private IPv4 loopback listener and exposes only the scoped window endpoint', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-window-ip-')), backend = buildBackend(dir);
   const token = 'b'.repeat(48); backend.browsers.windowTokens.set(token, { ready: false });
-  const bridge = await createWindowBridge(backend.app.callback(), token);
   const headers = { 'X-CIKE-Window-Token': token };
+  let bridge;
   try {
+    bridge = await createWindowBridge(backend.app.callback(), token);
     const url = new URL(bridge.url); assert.equal(require('net').isIP(url.hostname), 4); assert.ok(url.hostname.startsWith('127.'));
     assert.notEqual(url.hostname, '127.0.0.1'); assert.ok(!bridge.url.includes(token));
     assert.equal((await fetch(bridge.url)).status, 401);
@@ -59,7 +60,10 @@ test('window bridge uses a private IPv4 loopback listener and exposes only the s
     backend.browsers.windowTokens.delete(token);
     assert.equal((await fetch(bridge.url, { headers })).status, 401);
     await bridge.close(); await assert.rejects(fetch(bridge.url, { headers }));
-  } finally { await bridge.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } catch (error) {
+    if (bridge || process.platform !== 'darwin' || error.code !== 'EADDRNOTAVAIL') throw error;
+    t.skip('macOS runner has no configured alias for the private loopback address');
+  } finally { await bridge?.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('unavailable window transport preserves a healthy proxied browser; actual engine failures still fail and clean up', async () => {
@@ -74,7 +78,7 @@ test('unavailable window transport preserves a healthy proxied browser; actual e
   mock.method(runtime, 'launchNative', async options => {
     assert.equal(options.proxy.server, profile.proxy.server); assert.equal(options.bridge, undefined); return context;
   });
-  backend.browsers.createWindowBridge = async () => { throw Object.assign(new Error('blocked'), { code: 'EACCES' }); };
+  backend.browsers.createWindowBridge = async () => { throw Object.assign(new Error('loopback address unavailable'), { code: 'EADDRNOTAVAIL' }); };
   try {
     const result = await backend.browsers.open(profile.id);
     assert.equal(result.open, true); assert.match(result.warning, /可手动调整窗口/);
