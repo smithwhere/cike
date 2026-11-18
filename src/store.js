@@ -63,7 +63,8 @@ class ProfileStore {
   update(id, patch = {}) {
     const old = this.get(id);
     if (!old) return null;
-    let next = { ...old, ...pick(patch), updatedAt: new Date().toISOString() };
+    const changes = pick(patch);
+    let next = { ...old, ...changes, updatedAt: new Date().toISOString() };
     if (old.fingerprintMode === 'legacy' && ['native', 'hardware', 'kernel'].includes(patch.fingerprintMode)) {
       // Keep non-secret former fingerprint settings for reference. Never put
       // proxy credentials into a second unencrypted copy.
@@ -71,7 +72,10 @@ class ProfileStore {
       next.previousFingerprint = Object.fromEntries(keys.map(k => [k, old[k] ?? null]));
       Object.assign(next, { platform: HOST_PLATFORM, userAgent: null, canvasNoise: false, canvasSeed: null,
         hardwareConcurrency: null, deviceMemory: null, webrtc: patch.webrtc || (old.webrtc === 'disabled' ? 'restricted' : old.webrtc || 'auto') },
-        pick(patch), { platform: HOST_PLATFORM, userAgent: null });
+        changes, { platform: HOST_PLATFORM, userAgent: null });
+    } else if (changes.fingerprintMode === 'native' && ['hardware', 'kernel'].includes(old.fingerprintMode)) {
+      const { hardwareConcurrency, deviceMemory, gpuPreset, canvasNoise, audioNoise } = DEFAULT_SPEC;
+      Object.assign(next, { hardwareConcurrency, deviceMemory, gpuPreset, canvasNoise, audioNoise }, changes);
     }
     next = completeHardware(next, old.fingerprintMode === 'hardware' ? { ...old, ...patch } : patch);
     if (old.fingerprintMode !== 'legacy' || next.fingerprintMode !== 'legacy') validateProfile(next);

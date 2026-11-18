@@ -32,3 +32,30 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
     assert.equal(store.create(generated).fingerprintSeed, generated.fingerprintSeed);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('switching a simulated profile to native clears inherited hardware overrides', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-native-switch-'));
+  try {
+    const store = new ProfileStore(dir);
+    for (const fingerprintMode of ['hardware', 'kernel']) {
+      const profile = store.create({ fingerprintMode, hardwareConcurrency: 4, gpuPreset: 'nvidia-rtx-3060', locale: 'zh-CN' });
+      const edited = store.update(profile.id, { hardwareConcurrency: 6 });
+      assert.equal(edited.hardwareConcurrency, 6);
+      assert.equal(edited.fingerprintSeed, profile.fingerprintSeed);
+
+      assert.throws(() => store.update(profile.id, { fingerprintMode: 'native', hardwareConcurrency: 8 }), /原生一致/);
+      assert.equal(store.get(profile.id).fingerprintMode, fingerprintMode);
+
+      const native = store.update(profile.id, { fingerprintMode: 'native' });
+      assert.equal(native.fingerprintMode, 'native');
+      assert.equal(native.hardwareConcurrency, null);
+      assert.equal(native.deviceMemory, null);
+      assert.equal(native.gpuPreset, 'native');
+      assert.equal(native.canvasNoise, false);
+      assert.equal(native.audioNoise, false);
+      assert.equal(native.fingerprintSeed, profile.fingerprintSeed);
+      assert.equal(native.locale, 'zh-CN');
+      assert.deepEqual(new ProfileStore(dir).get(profile.id), native);
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
