@@ -34,17 +34,21 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('random generation supports 32 threads and every memory option from 4 GB through 96 GB', (t) => {
+test('random generation uses every supported CPU and memory choice once per pool index', (t) => {
+  const cpus = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32];
   const memories = [4, 8, 16, 32, 48, 64, 96];
-  let memoryIndex = 0;
-  t.mock.method(crypto, 'randomInt', size => size === memories.length ? memoryIndex : size - 1);
+  const indexes = new Map();
+  t.mock.method(crypto, 'randomInt', size => indexes.get(size) ?? 0);
 
+  assert.deepEqual(hardwareOptions().cpus, [2, ...cpus]);
   assert.deepEqual(hardwareOptions().memories, [0.5, 1, 2, ...memories]);
+  for (const [index, cpu] of cpus.entries()) {
+    indexes.set(cpus.length, index);
+    assert.equal(hardwareConfig(generateHardware()).hardwareConcurrency, cpu);
+  }
   for (const [index, memory] of memories.entries()) {
-    memoryIndex = index;
-    const config = hardwareConfig(generateHardware());
-    assert.equal(config.hardwareConcurrency, 32);
-    assert.equal(config.deviceMemory, memory);
+    indexes.set(memories.length, index);
+    assert.equal(hardwareConfig(generateHardware()).deviceMemory, memory);
   }
 });
 

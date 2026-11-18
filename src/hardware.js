@@ -39,8 +39,8 @@ const GPU_PRESETS = {
   'apple-m4': gpuPreset('Apple M4', 'Apple', 'apple'),
   'apple-m4-pro': gpuPreset('Apple M4 Pro', 'Apple', 'apple'),
 };
-const CPU_VALUES = [2, 4, 6, 8, 12, 16, 24, 32];
-const RANDOM_CPU_VALUES = [4, 6, 8, 12, 16, 32];
+const RANDOM_CPU_VALUES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32];
+const CPU_VALUES = [2, ...RANDOM_CPU_VALUES];
 const RANDOM_MEMORY_VALUES = [4, 8, 16, 32, 48, 64, 96];
 const MEMORY_VALUES = [0.5, 1, 2, ...RANDOM_MEMORY_VALUES];
 function hardwareOptions() {
