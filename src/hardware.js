@@ -16,7 +16,9 @@ const GPU_PRESETS = {
   'amd-rx-6600': gpuPreset('AMD Radeon RX 6600', 'AMD', 'amd'),
 };
 const CPU_VALUES = [2, 4, 6, 8, 12, 16, 24, 32];
-const MEMORY_VALUES = [0.5, 1, 2, 4, 8];
+const RANDOM_CPU_VALUES = [4, 6, 8, 12, 16, 32];
+const RANDOM_MEMORY_VALUES = [4, 8, 16, 32, 48, 64, 96];
+const MEMORY_VALUES = [0.5, 1, 2, ...RANDOM_MEMORY_VALUES];
 function hardwareOptions() {
   return { cpus: CPU_VALUES, memories: MEMORY_VALUES,
     gpus: Object.entries(GPU_PRESETS).map(([id, gpu]) => ({ id, name: gpu.name })) };
@@ -24,7 +26,7 @@ function hardwareOptions() {
 function generateHardware() {
   const choose = list => list[crypto.randomInt(list.length)];
   const gpuPreset = choose(Object.keys(GPU_PRESETS).filter(id => id !== 'native'));
-  return { fingerprintMode: 'hardware', hardwareConcurrency: choose([4, 6, 8, 12, 16]), deviceMemory: choose([4, 8]),
+  return { fingerprintMode: 'hardware', hardwareConcurrency: choose(RANDOM_CPU_VALUES), deviceMemory: choose(RANDOM_MEMORY_VALUES),
     gpuPreset, canvasNoise: true, audioNoise: true, fingerprintSeed: crypto.randomBytes(16).toString('hex') };
 }
 function completeHardware(profile, patch = {}) {
@@ -41,7 +43,7 @@ function completeHardware(profile, patch = {}) {
 }
 function validateHardware(profile) {
   if (!CPU_VALUES.includes(profile.hardwareConcurrency)) throw Object.assign(new Error('请选择有效的 CPU 线程数'), { status: 400 });
-  if (!MEMORY_VALUES.includes(profile.deviceMemory)) throw Object.assign(new Error('网页内存值必须是 0.5、1、2、4 或 8 GB'), { status: 400 });
+  if (!MEMORY_VALUES.includes(profile.deviceMemory)) throw Object.assign(new Error(`网页内存值须从 ${MEMORY_VALUES.join('、')} GB 中选择`), { status: 400 });
   if (!Object.hasOwn(GPU_PRESETS, profile.gpuPreset)) throw Object.assign(new Error('请选择有效的显卡标识'), { status: 400 });
   if (!/^[a-f0-9]{32}$/.test(profile.fingerprintSeed || '')) throw Object.assign(new Error('指纹种子格式无效'), { status: 400 });
   if (typeof profile.canvasNoise !== 'boolean' || typeof profile.audioNoise !== 'boolean') throw Object.assign(new Error('Canvas 和音频选项必须为布尔值'), { status: 400 });

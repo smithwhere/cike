@@ -1,11 +1,12 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ProfileStore } = require('../src/store');
-const { generateHardware, hardwareOptions } = require('../src/hardware');
+const { generateHardware, hardwareConfig, hardwareOptions } = require('../src/hardware');
 
 test('hardware settings have stable per-profile seeds and preserve explicit choices on edits and restart', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-store-'));
@@ -22,7 +23,7 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
     assert.equal(updated.gpuPreset, 'native');
     assert.equal(new ProfileStore(dir).get(a.id).fingerprintSeed, a.fingerprintSeed);
     assert.throws(() => store.update(a.id, { hardwareConcurrency: -1 }), /CPU/);
-    assert.throws(() => store.update(a.id, { deviceMemory: 16 }), /内存/);
+    assert.throws(() => store.update(a.id, { deviceMemory: 128 }), /内存/);
     assert.throws(() => store.update(a.id, { gpuPreset: '__proto__' }), /显卡/);
     assert.throws(() => store.update(a.id, { fingerprintSeed: 'bad' }), /种子/);
     assert.throws(() => store.update(a.id, { fingerprintMode: 'legacy' }), /转换/);
@@ -31,6 +32,20 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
     assert.ok(hardwareOptions().cpus.includes(generated.hardwareConcurrency));
     assert.equal(store.create(generated).fingerprintSeed, generated.fingerprintSeed);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('random generation supports 32 threads and every memory option from 4 GB through 96 GB', (t) => {
+  const memories = [4, 8, 16, 32, 48, 64, 96];
+  let memoryIndex = 0;
+  t.mock.method(crypto, 'randomInt', size => size === memories.length ? memoryIndex : size - 1);
+
+  assert.deepEqual(hardwareOptions().memories, [0.5, 1, 2, ...memories]);
+  for (const [index, memory] of memories.entries()) {
+    memoryIndex = index;
+    const config = hardwareConfig(generateHardware());
+    assert.equal(config.hardwareConcurrency, 32);
+    assert.equal(config.deviceMemory, memory);
+  }
 });
 
 test('switching a simulated profile to native clears inherited hardware overrides', () => {
