@@ -134,6 +134,7 @@ class BrowserManager {
         ignoreDefaultArgs: ['--enable-automation'],
         args: ['--no-first-run', '--no-default-browser-check', '--site-per-process', '--disable-background-mode',
           '--disable-blink-features=AutomationControlled',
+          ...(!kernel && effective.userAgent ? [`--user-agent=${effective.userAgent}`] : []),
           ...(effective.locale !== 'auto' ? [`--lang=${effective.locale}`, `--accept-lang=${effective.locale}`] : []),
           ...(debugPort ? [`--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1'] : []),
           ...webrtcArgs({ ...effective, proxy: proxy || useSystemProxy || profile.webrtc === 'auto' }),

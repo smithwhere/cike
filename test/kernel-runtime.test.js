@@ -60,6 +60,7 @@ test('native core changes hardware without replacing APIs, agrees across workers
       assert.equal(main.cores, 4); assert.equal(main.memory, false); assert.equal(main.cpuGetterNative, true);
       assert.equal(main.cleanPixels, true); assert.equal(main.canvasNative, true); assert.equal(main.timezone, 'UTC');
       assert.equal(main.language, 'en-US'); assert.equal(main.headers.language, main.language); assert.equal(main.headers.ua, main.ua);
+      if (a.userAgent) assert.equal(main.ua, a.userAgent);
       assert.deepEqual(await page.frames()[1].evaluate(observe), main);
       for (const type of ['classic', 'module']) {
         const value = await page.evaluate(type => new Promise((resolve, reject) => {

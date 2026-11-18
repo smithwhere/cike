@@ -12,6 +12,7 @@ async function mountHardware(root, prefix, profile = {}) {
       <div class="field-row"><div class="field"><label>CPU 线程数</label><select id="${prefix}-hardware-cpu" class="input">${choices(options.cpus, profile.hardwareConcurrency || 8)}</select></div>
       <div id="${prefix}-software-memory" class="field ${kernel ? 'hidden' : ''}"><label>网页内存值（GB）</label><select id="${prefix}-hardware-memory" class="input">${choices(options.memories, profile.deviceMemory || 8)}</select></div></div>
       <div class="field"><label>显卡标识</label><select id="${prefix}-hardware-gpu" class="input">${options.gpus.map(gpu => `<option value="${esc(gpu.id)}" ${gpu.id === (profile.gpuPreset || 'native') ? 'selected' : ''}>${esc(gpu.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="${prefix}-user-agent">User-Agent</label><select id="${prefix}-user-agent" class="input"></select></div>
       <div id="${prefix}-software-noise" class="field-row ${kernel ? 'hidden' : ''}"><div class="field"><label>Canvas 读取</label><select id="${prefix}-hardware-canvas" class="input"><option value="yes" ${!hardware || profile.canvasNoise ? 'selected' : ''}>按环境固定处理</option><option value="no" ${hardware && !profile.canvasNoise ? 'selected' : ''}>原生输出</option></select></div>
       <div class="field"><label>音频读取</label><select id="${prefix}-hardware-audio" class="input"><option value="yes" ${!hardware || profile.audioNoise ? 'selected' : ''}>按环境固定处理</option><option value="no" ${hardware && !profile.audioNoise ? 'selected' : ''}>原生输出</option></select></div></div>
       <input type="hidden" id="${prefix}-fingerprint-seed" value="${esc(profile.fingerprintSeed || '')}">
@@ -21,13 +22,24 @@ async function mountHardware(root, prefix, profile = {}) {
     <p id="${prefix}-kernel-hint" class="hint ${kernel ? '' : 'hidden'}">内核模式在 Firefox 内部设置 CPU/显卡，页面与 Worker 共用配置，不注入页面脚本。Canvas/音频保持原生，Firefox 原本不提供 deviceMemory。建议显卡保持原生；更改标识不能改变实际 GPU 能力。先在“设置”下载 Camoufox（约 1.3 GB）。Chrome 与 Firefox 的 Cookie/站点数据独立保存，切换后需要重新登录；原 Chrome 数据保留，可切回。配置编号不是网站读取的完整指纹。</p>
     <p id="${prefix}-software-hint" class="hint ${hardware ? '' : 'hidden'}">软件层模式会改写浏览器 API，并可处理 Canvas/音频输出。即使参数一致，检测网站仍可能报告“环境被篡改”。如需避免这些脚本改写痕迹，请使用内核模式；不保证通过所有网站检测。</p>`;
   const field = id => root.querySelector('#' + prefix + '-' + id);
+  const userAgent = field('user-agent');
+  const selectedUserAgents = { [profile.fingerprintMode]: profile.userAgent || '' };
   const syncMode = () => {
     const mode = field('fingerprint-mode').value;
     field('hardware-fields').classList.toggle('hidden', mode === 'native');
     for (const id of ['software-memory', 'software-noise', 'software-hint']) field(id).classList.toggle('hidden', mode !== 'hardware');
     field('kernel-hint').classList.toggle('hidden', mode !== 'kernel');
+    const presets = options.userAgents?.[mode] || [];
+    userAgent.replaceChildren(new Option('内核原生 UA', ''));
+    if (presets.length) {
+      userAgent.add(new Option('保存时随机分配', 'random'));
+      for (const [label, value] of presets) userAgent.add(new Option(label, value));
+      userAgent.value = selectedUserAgents[mode] ?? (profile.id ? '' : 'random');
+    }
   };
+  userAgent.onchange = () => { selectedUserAgents[field('fingerprint-mode').value] = userAgent.value; };
   field('fingerprint-mode').onchange = syncMode;
+  syncMode();
   field('hardware-generate').onclick = async event => {
     event.target.disabled = true;
     try {
@@ -48,11 +60,13 @@ async function mountHardware(root, prefix, profile = {}) {
 function readHardware(root, prefix, fallback = {}) {
   const field = id => root.querySelector('#' + prefix + '-' + id);
   const mode = field('fingerprint-mode')?.value || (['hardware', 'kernel'].includes(fallback.fingerprintMode) ? fallback.fingerprintMode : 'native');
-  if (mode === 'native') return { fingerprintMode: 'native', hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
+  const userAgentField = field('user-agent');
+  const userAgent = userAgentField ? userAgentField.value || null : fallback.userAgent ?? null;
+  if (mode === 'native') return { fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
   if (mode === 'kernel') return { fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
-    deviceMemory: null, gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset || 'native', canvasNoise: false, audioNoise: false,
+    userAgent, deviceMemory: null, gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset || 'native', canvasNoise: false, audioNoise: false,
     fingerprintSeed: field('fingerprint-seed')?.value || fallback.fingerprintSeed || null };
-  return { fingerprintMode: 'hardware', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency),
+  return { fingerprintMode: 'hardware', userAgent, hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency),
     deviceMemory: Number(field('hardware-memory')?.value || fallback.deviceMemory), gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset,
     canvasNoise: field('hardware-canvas') ? field('hardware-canvas').value === 'yes' : fallback.canvasNoise,
     audioNoise: field('hardware-audio') ? field('hardware-audio').value === 'yes' : fallback.audioNoise,

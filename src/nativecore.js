@@ -33,6 +33,7 @@ function validateKernel(profile) {
 function nativeConfig(profile) {
   validateKernel(profile);
   const config = { 'navigator.hardwareConcurrency': profile.hardwareConcurrency };
+  if (profile.userAgent) config['navigator.userAgent'] = profile.userAgent;
   const locale = profile.locale === 'auto' ? Intl.DateTimeFormat().resolvedOptions().locale : profile.locale;
   config['locale:all'] = [...new Set([locale, locale.split('-')[0]])].join(', ');
   if (profile.timezone !== 'auto') config.timezone = profile.timezone;

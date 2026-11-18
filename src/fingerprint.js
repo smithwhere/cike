@@ -1,11 +1,13 @@
 'use strict';
+const { isUserAgentAllowed } = require('./user-agents');
 // Native mode preserves Chromium values. Hardware mode is explicit software
 // emulation and must be installed in pages and workers before site scripts.
 const HOST_PLATFORM = { darwin: 'mac', win32: 'win', linux: 'linux' }[process.platform] || 'linux';
 function bad(message) { throw Object.assign(new Error(message), { status: 400 }); }
 function validateProfile(profile) {
   if (!['native', 'hardware', 'kernel'].includes(profile.fingerprintMode)) bad('旧环境需要先转换为原生一致模式；Cookie 和站点数据会保留');
-  if (profile.platform !== HOST_PLATFORM || profile.userAgent) bad('当前使用本机系统与原生浏览器 UA，不支持跨系统伪装');
+  if (profile.platform !== HOST_PLATFORM) bad('环境平台必须与本机系统一致');
+  if (!isUserAgentAllowed(profile)) bad('请选择与本机系统和浏览器内核匹配的 User-Agent 预设');
   if (profile.fingerprintMode === 'native' && (profile.canvasNoise || profile.hardwareConcurrency != null || profile.deviceMemory != null || profile.audioNoise || (profile.gpuPreset && profile.gpuPreset !== 'native'))) {
     bad('原生一致模式使用本机平台、UA、CPU、内存与 Canvas；不支持页面级伪装');
   }

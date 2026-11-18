@@ -6,7 +6,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ProfileStore } = require('../src/store');
+const { HOST_PLATFORM } = require('../src/fingerprint');
 const { generateHardware, hardwareConfig, hardwareOptions } = require('../src/hardware');
+const { nativeConfig } = require('../src/nativecore');
+const { userAgentPresets, resolveUserAgent, isUserAgentAllowed } = require('../src/user-agents');
 
 test('hardware settings have stable per-profile seeds and preserve explicit choices on edits and restart', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-store-'));
@@ -68,6 +71,56 @@ test('each simulated GPU preset is selectable and can be generated', (t) => {
   const { gpu } = hardwareConfig({ ...generateHardware(), gpuPreset: 'apple-m4-pro' });
   assert.equal(gpu.renderer, 'ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)');
   assert.equal(gpu.webgpuVendor, 'apple');
+});
+
+test('User-Agent presets are unique and random selection is scoped to the platform and engine', (t) => {
+  const values = new Set();
+  let index = 0;
+  t.mock.method(crypto, 'randomInt', () => index);
+
+  for (const [platform, count] of [['win', 30], ['mac', 10]]) {
+    const presets = userAgentPresets(platform);
+    for (const [fingerprintMode, entries] of Object.entries(presets)) {
+      assert.equal(entries.length, count);
+      for (index = 0; index < entries.length; index++) {
+        const userAgent = entries[index][1];
+        const profile = { platform, fingerprintMode, userAgent };
+        assert.equal(resolveUserAgent(profile, 'random'), userAgent);
+        assert.equal(isUserAgentAllowed(profile), true);
+        assert.equal(isUserAgentAllowed({ ...profile, platform: platform === 'win' ? 'mac' : 'win' }), false);
+        assert.equal(isUserAgentAllowed({ ...profile, fingerprintMode: fingerprintMode === 'hardware' ? 'kernel' : 'hardware' }), false);
+        assert.ok(!values.has(userAgent));
+        values.add(userAgent);
+      }
+    }
+  }
+  assert.equal(values.size, 80);
+  assert.equal(resolveUserAgent({ platform: 'linux', fingerprintMode: 'hardware' }, 'random'), null);
+  assert.equal(resolveUserAgent({ platform: 'win', fingerprintMode: 'native' }, 'random'), null);
+});
+
+test('creating a simulated profile assigns its UA once, and explicit changes persist', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-user-agent-'));
+  try {
+    const store = new ProfileStore(dir);
+    const presets = userAgentPresets(HOST_PLATFORM);
+    for (const fingerprintMode of ['hardware', 'kernel']) {
+      const profile = store.create({ fingerprintMode });
+      const entries = presets[fingerprintMode];
+      if (entries.length) assert.ok(entries.some(([, value]) => value === profile.userAgent));
+      else assert.equal(profile.userAgent, null);
+      assert.equal(store.update(profile.id, { name: 'renamed' }).userAgent, profile.userAgent);
+      assert.equal(new ProfileStore(dir).get(profile.id).userAgent, profile.userAgent);
+      assert.throws(() => store.update(profile.id, { userAgent: 'unsupported' }), /User-Agent/);
+      assert.equal(store.update(profile.id, { userAgent: null }).userAgent, null);
+      if (entries.length) {
+        const selected = store.update(profile.id, { userAgent: entries[0][1] });
+        assert.equal(selected.userAgent, entries[0][1]);
+        if (fingerprintMode === 'kernel') assert.equal(nativeConfig(selected)['navigator.userAgent'], selected.userAgent);
+      }
+      assert.equal(store.update(profile.id, { fingerprintMode: 'native' }).userAgent, null);
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('switching a simulated profile to native clears inherited hardware overrides', () => {

@@ -31,7 +31,7 @@ async function observe() {
   const headers = await fetch(location.origin + '/headers').then(response => response.json());
   return { cores: navigator.hardwareConcurrency, memory: navigator.deviceMemory,
     canvas: a, repeated: b, exported: hash(copied.getImageData(0, 0, 64, 64).data), gpu, gpuPixels,
-    memoryHeader: headers['device-memory'], memoryHint: headers['sec-ch-device-memory'] };
+    ua: navigator.userAgent, uaHeader: headers['user-agent'], memoryHeader: headers['device-memory'], memoryHint: headers['sec-ch-device-memory'] };
 }
 async function audioValues() {
   const context = new OfflineAudioContext(1, 4096, 44100), oscillator = context.createOscillator(); oscillator.connect(context.destination); oscillator.start();
@@ -61,6 +61,8 @@ test('hardware simulation agrees at first script execution across pages, frames 
     const context = manager.getContext(a.id), page = await context.newPage(); await page.goto(origin);
     const main = await page.evaluate(observe);
     assert.equal(main.cores, 4); assert.equal(main.memory, 4);
+    assert.equal(main.uaHeader, main.ua);
+    if (a.userAgent) assert.equal(main.ua, a.userAgent);
     assert.equal(main.canvas, main.repeated); assert.equal(main.canvas, main.exported);
     if (main.gpuPixels !== null) assert.equal(main.gpuPixels, main.canvas);
     assert.equal(main.memoryHeader, '4'); assert.equal(main.memoryHint, '4');

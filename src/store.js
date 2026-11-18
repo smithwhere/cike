@@ -6,6 +6,7 @@ const { HOST_PLATFORM, validateProfile } = require('./fingerprint');
 const { privateDirectory, readJSON, writeJSON, credentials } = require('./privatefiles');
 const { validateInlineProxy } = require('./proxyconfig');
 const { completeHardware } = require('./hardware');
+const { resolveUserAgent } = require('./user-agents');
 
 const DEFAULT_SPEC = {
   name: 'profile', group: '', fingerprintMode: 'native', platform: HOST_PLATFORM,
@@ -50,6 +51,7 @@ class ProfileStore {
     const record = completeHardware({ ...structuredClone(DEFAULT_SPEC), ...pick(spec), id,
       name: String(spec.name || '').trim() || String(sequence), sequence,
       viewport: { ...DEFAULT_SPEC.viewport, ...spec.viewport }, createdAt: now, updatedAt: now }, spec);
+    record.userAgent = resolveUserAgent(record, Object.hasOwn(spec, 'userAgent') ? record.userAgent : 'random');
     validateProfile(record);
     if (record.proxy) validateInlineProxy(record.proxy);
     this.sequence = sequence;
@@ -72,13 +74,17 @@ class ProfileStore {
       next.previousFingerprint = Object.fromEntries(keys.map(k => [k, old[k] ?? null]));
       Object.assign(next, { platform: HOST_PLATFORM, userAgent: null, canvasNoise: false, canvasSeed: null,
         hardwareConcurrency: null, deviceMemory: null, webrtc: patch.webrtc || (old.webrtc === 'disabled' ? 'restricted' : old.webrtc || 'auto') },
-        changes, { platform: HOST_PLATFORM, userAgent: null });
+        changes, { platform: HOST_PLATFORM });
     } else if (changes.fingerprintMode === 'native' && ['hardware', 'kernel'].includes(old.fingerprintMode)) {
       const { hardwareConcurrency, deviceMemory, gpuPreset, canvasNoise, audioNoise } = DEFAULT_SPEC;
       Object.assign(next, { hardwareConcurrency, deviceMemory, gpuPreset, canvasNoise, audioNoise }, changes);
     }
     next = completeHardware(next, old.fingerprintMode === 'hardware' ? { ...old, ...patch } : patch);
-    if (old.fingerprintMode !== 'legacy' || next.fingerprintMode !== 'legacy') validateProfile(next);
+    if (old.fingerprintMode !== 'legacy' || next.fingerprintMode !== 'legacy') {
+      const choice = next.fingerprintMode !== old.fingerprintMode && !Object.hasOwn(changes, 'userAgent') ? null : next.userAgent;
+      next.userAgent = resolveUserAgent(next, choice);
+      validateProfile(next);
+    }
     if (next.proxy) {
       next.proxy = { ...next.proxy };
       if (patch.proxy && !Object.hasOwn(patch.proxy, 'password') && old.proxy?.server === next.proxy.server && (old.proxy?.username || '') === (next.proxy.username || '')) next.proxy.password = old.proxy.password;
