@@ -48,6 +48,24 @@ test('random generation supports 32 threads and every memory option from 4 GB th
   }
 });
 
+test('each simulated GPU preset is selectable and can be generated', (t) => {
+  const presets = hardwareOptions().gpus.filter(({ id }) => id !== 'native');
+  assert.equal(presets.length, 28);
+  let gpuIndex = 0;
+  t.mock.method(crypto, 'randomInt', size => size === presets.length ? gpuIndex : 0);
+
+  for (const [index, preset] of presets.entries()) {
+    gpuIndex = index;
+    const profile = generateHardware();
+    assert.equal(profile.gpuPreset, preset.id);
+    assert.equal(hardwareConfig(profile).gpu.name, preset.name);
+  }
+
+  const { gpu } = hardwareConfig({ ...generateHardware(), gpuPreset: 'apple-m4-pro' });
+  assert.equal(gpu.renderer, 'ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)');
+  assert.equal(gpu.webgpuVendor, 'apple');
+});
+
 test('switching a simulated profile to native clears inherited hardware overrides', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-native-switch-'));
   try {
