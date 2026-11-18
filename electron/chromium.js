@@ -9,20 +9,19 @@ const { pipeline } = require('stream/promises');
 const exec = promisify(execFile);
 const { privateDirectory, writePrivate } = require('../src/privatefiles');
 const { extractBrowserZip } = require('../src/zip');
+const CHROMIUM_VERSION = require('../src/chromium-version');
 const inProgress = new Map();
-function chromiumEntry() {
-  const file = path.join(path.dirname(require.resolve('playwright-core/package.json')), 'browsers.json');
-  return JSON.parse(fs.readFileSync(file)).browsers.find(b => b.name === 'chromium');
-}
+const verifiedVersions = new Map();
 function cftPlatform(platform = process.platform, arch = process.arch) {
-  const target = { 'darwin-arm64': 'mac-arm64', 'darwin-x64': 'mac-x64', 'linux-x64': 'linux64', 'win32-x64': 'win64' }[`${platform}-${arch}`];
+  const target = { 'darwin-arm64': 'mac-arm64', 'darwin-x64': 'mac-x64', 'linux-x64': 'linux64', 'linux-arm64': 'linux-arm64', 'win32-x64': 'win64' }[`${platform}-${arch}`];
   if (!target) throw new Error('不支持此平台的 Chromium 下载；Windows 版需要 64 位 x64 环境');
   return target;
 }
 function downloadUrl(platform = process.platform, arch = process.arch) {
-  const host = process.env.PLAYWRIGHT_DOWNLOAD_HOST || 'https://cdn.playwright.dev';
+  const mirror = process.env.PLAYWRIGHT_DOWNLOAD_HOST;
+  const base = mirror ? `${mirror.replace(/\/+$/, '')}/builds/cft` : 'https://storage.googleapis.com/chrome-for-testing-public';
   const target = cftPlatform(platform, arch);
-  return `${host}/builds/cft/${chromiumEntry().browserVersion}/${target}/chrome-${target}.zip`;
+  return `${base}/${CHROMIUM_VERSION}/${target}/chrome-${target}.zip`;
 }
 function browserRoot(dir) { return path.join(dir, 'browsers'); }
 function executableMarker(dir) { return path.join(browserRoot(dir), 'chromium-executable.txt'); }
@@ -39,13 +38,24 @@ async function browserVersion(executable, platform = process.platform) {
   return stdout.match(/\d+\.\d+\.\d+\.\d+/)?.[0] || null;
 }
 async function chromiumStatus(dir) {
-  const targetVersion = chromiumEntry().browserVersion;
+  const targetVersion = CHROMIUM_VERSION;
   try {
     const executable = fs.readFileSync(executableMarker(dir), 'utf8').trim();
-    const version = await browserVersion(executable);
+    const { size, mtimeMs, ctimeMs, ino } = fs.statSync(executable);
+    const identity = [executable, size, mtimeMs, ctimeMs, ino].join('\0');
+    const cached = verifiedVersions.get(dir);
+    const version = cached?.identity === identity ? cached.version : await browserVersion(executable);
+    if (version) verifiedVersions.set(dir, { identity, version });
     if (version) return { installed: true, executable, version, targetVersion, updateAvailable: version !== targetVersion };
   } catch { /* not installed or unusable */ }
   return { installed: false, executable: null, version: null, targetVersion, updateAvailable: true };
+}
+async function resolveManagedChromium(dir) {
+  const status = await chromiumStatus(dir);
+  if (!status.installed || status.updateAvailable) {
+    throw Object.assign(new Error(`请先在设置中安装 Chromium ${CHROMIUM_VERSION}`), { status: 409 });
+  }
+  return status.executable;
 }
 async function downloadFile(url, dest, onProgress, redirects = 0, maxBytes = 1024 * 1024 * 1024) {
   if (redirects > 5 || new URL(url).protocol !== 'https:') throw new Error('内核下载必须使用 HTTPS，且不能无限重定向');
@@ -97,10 +107,10 @@ async function install(dir, onProgress) {
     // Playwright's CfT archive may omit bundle resource seals. Do not repair
     // that by re-signing locally or claim Developer ID validation: transport
     // trust is HTTPS to the configured CDN, followed by a version check.
-    if (await browserVersion(executable) !== chromiumEntry().browserVersion) throw new Error('下载的内核版本不匹配');
+    if (await browserVersion(executable) !== CHROMIUM_VERSION) throw new Error('下载的内核版本不匹配');
     // Keep the downloaded bundle unchanged, including its icon. Old
     // kernels remain available until the new version is fully verified.
-    const destination = path.join(browserRoot(dir), `${chromiumEntry().browserVersion}-${path.basename(staging).slice(9)}`);
+    const destination = path.join(browserRoot(dir), `${CHROMIUM_VERSION}-${path.basename(staging).slice(9)}`);
     const relative = path.relative(staging, executable);
     fs.renameSync(staging, destination);
     const final = path.join(destination, relative);
@@ -115,4 +125,4 @@ async function downloadChromium(dir, onProgress) {
   inProgress.set(dir, promise);
   try { return await promise; } finally { inProgress.delete(dir); }
 }
-module.exports = { chromiumStatus, downloadChromium, downloadUrl, executableMarker, browserRoot, browserVersion, findExecutable, cftPlatform, downloadFile };
+module.exports = { chromiumStatus, resolveManagedChromium, downloadChromium, downloadUrl, executableMarker, browserRoot, browserVersion, findExecutable, cftPlatform, downloadFile };

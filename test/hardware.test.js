@@ -39,12 +39,12 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
 
 test('random generation uses every supported CPU and memory choice once per pool index', (t) => {
   const cpus = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32];
-  const memories = [4, 8, 16, 32, 48, 64, 96];
+  const memories = [4, 8];
   const indexes = new Map();
   t.mock.method(crypto, 'randomInt', size => indexes.get(size) ?? 0);
 
   assert.deepEqual(hardwareOptions().cpus, [2, ...cpus]);
-  assert.deepEqual(hardwareOptions().memories, [0.5, 1, 2, ...memories]);
+  assert.deepEqual(hardwareOptions().memories, [0.5, 1, 2, 4, 8, 16, 32, 48, 64, 96]);
   for (const [index, cpu] of cpus.entries()) {
     indexes.set(cpus.length, index);
     assert.equal(hardwareConfig(generateHardware()).hardwareConcurrency, cpu);
@@ -55,19 +55,20 @@ test('random generation uses every supported CPU and memory choice once per pool
   }
 });
 
-test('each simulated GPU preset is selectable and can be generated', (t) => {
+test('simulated GPU presets remain selectable, with platform-specific random pools', (t) => {
   const presets = hardwareOptions().gpus.filter(({ id }) => id !== 'native');
   assert.equal(presets.length, 28);
   let gpuIndex = 0;
-  t.mock.method(crypto, 'randomInt', size => size === presets.length ? gpuIndex : 0);
-
-  for (const [index, preset] of presets.entries()) {
-    gpuIndex = index;
-    const profile = generateHardware();
-    assert.equal(profile.gpuPreset, preset.id);
-    assert.equal(hardwareConfig(profile).gpu.name, preset.name);
+  t.mock.method(crypto, 'randomInt', size => size === 23 || size === 5 ? gpuIndex : 0);
+  for (const [platform, arch] of [['win32', 'x64'], ['linux', 'x64'], ['darwin', 'arm64']]) {
+    const pool = presets.filter(({ id }) => id.startsWith('apple-') === (platform === 'darwin'));
+    for (const [index, preset] of pool.entries()) {
+      gpuIndex = index;
+      assert.equal(generateHardware(platform, arch).gpuPreset, preset.id);
+    }
   }
-
+  assert.equal(generateHardware('darwin', 'x64').gpuPreset, 'native');
+  gpuIndex = 0;
   const { gpu } = hardwareConfig({ ...generateHardware(), gpuPreset: 'apple-m4-pro' });
   assert.equal(gpu.renderer, 'ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)');
   assert.equal(gpu.webgpuVendor, 'apple');
@@ -82,15 +83,18 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
     const presets = userAgentPresets(platform);
     for (const [fingerprintMode, entries] of Object.entries(presets)) {
       assert.equal(entries.length, count);
-      for (index = 0; index < entries.length; index++) {
-        const userAgent = entries[index][1];
+      for (const [, userAgent] of entries) {
         const profile = { platform, fingerprintMode, userAgent };
-        assert.equal(resolveUserAgent(profile, 'random'), userAgent);
         assert.equal(isUserAgentAllowed(profile), true);
         assert.equal(isUserAgentAllowed({ ...profile, platform: platform === 'win' ? 'mac' : 'win' }), false);
         assert.equal(isUserAgentAllowed({ ...profile, fingerprintMode: fingerprintMode === 'hardware' ? 'kernel' : 'hardware' }), false);
         assert.ok(!values.has(userAgent));
         values.add(userAgent);
+      }
+      const compatible = entries.filter(([, ua]) => /(?:Chrome|Firefox)\/158\./.test(ua));
+      assert.ok(compatible.length);
+      for (index = 0; index < compatible.length; index++) {
+        assert.equal(resolveUserAgent({ platform, fingerprintMode }, 'random'), compatible[index][1]);
       }
     }
   }
@@ -99,13 +103,14 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
   assert.equal(resolveUserAgent({ platform: 'win', fingerprintMode: 'native' }, 'random'), null);
 });
 
-test('creating a simulated profile assigns its UA once, and explicit changes persist', () => {
+test('new profiles default to native UA, and explicit UA choices persist', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-user-agent-'));
   try {
     const store = new ProfileStore(dir);
     const presets = userAgentPresets(HOST_PLATFORM);
     for (const fingerprintMode of ['hardware', 'kernel']) {
-      const profile = store.create({ fingerprintMode });
+      assert.equal(store.create({ fingerprintMode }).userAgent, null);
+      const profile = store.create({ fingerprintMode, userAgent: 'random' });
       const entries = presets[fingerprintMode];
       if (entries.length) assert.ok(entries.some(([, value]) => value === profile.userAgent));
       else assert.equal(profile.userAgent, null);

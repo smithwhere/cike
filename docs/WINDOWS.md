@@ -1,8 +1,8 @@
 # CIKE Windows x64
 
-这是基于 [chainfix/cike](https://github.com/chainfix/cike) v0.7.0（`abeacd2`）制作的独立 Windows 移植版，在 [engeeeee/cike](https://github.com/engeeeee/cike) 维护。
+Windows 版源自 [engeeeee/cike](https://github.com/engeeeee/cike) 对 [chainfix/cike](https://github.com/chainfix/cike) v0.7.0 的移植。本分支在 [smithwhere/cike](https://github.com/smithwhere/cike) 维护。
 
-[下载 Windows 发布版](https://github.com/engeeeee/cike/releases/latest)，选择应用 ZIP 和 `SHA256SUMS.txt`。Release 中的下载文件无需登录 GitHub。
+[查看本仓库发布页](https://github.com/smithwhere/cike/releases)，选择 Windows ZIP 和 `SHA256SUMS.txt`。
 
 ## 使用
 

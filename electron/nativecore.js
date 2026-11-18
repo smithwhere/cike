@@ -16,8 +16,10 @@ async function verifyNativeExecutable(executable) {
   await browser.close();
 }
 async function nativeStatus(dir) {
-  try { return { installed: true, executable: nativeExecutable(dir), version: BUILD }; }
-  catch { return { installed: false, executable: null, version: BUILD }; }
+  let canDownload = true;
+  try { nativeAsset(); } catch { canDownload = false; }
+  try { return { installed: true, executable: nativeExecutable(dir), version: BUILD, canDownload }; }
+  catch { return { installed: false, executable: null, version: BUILD, canDownload }; }
 }
 async function install(dir, onProgress) {
   const current = await nativeStatus(dir);

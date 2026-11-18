@@ -4,7 +4,7 @@
 
 <h1 align="center">CIKE</h1>
 
-> **Windows 10/11 x64**：[下载 Windows 版](https://github.com/engeeeee/cike/releases/latest) · [使用与构建说明](docs/WINDOWS.md)。完整解压后双击 `CIKE.exe` 即可运行。下方正式发布与 macOS 安装说明保留自上游。
+> **Windows 10/11 x64**：[本仓库发布页](https://github.com/smithwhere/cike/releases) · [使用与构建说明](docs/WINDOWS.md)。下载 Windows ZIP 后完整解压，再运行 `CIKE.exe`。
 
 > **0.10.3 崩溃恢复**：修复 Firefox 标签页目标暂时消失时关闭整个环境的逻辑；退出等待设定时限，防止崩溃后 CIKE 留在后台。旧环境和异常退出后的启动缓存会先备份再重建，保留登录数据。兼容模式补充关闭 Canvas / 视频硬件加速；设置中可导出本地崩溃诊断。验证范围见 [Windows 说明](docs/WINDOWS.md)，不保证已覆盖所有 Windows 10 驱动及内核崩溃。
 
@@ -16,21 +16,13 @@
 
 ## Windows 版本说明
 
-当前正式发布仅提供 Apple 芯片版 macOS 安装包。维护者目前没有可用于完整测试的 Windows 设备，因此暂不合并和发布未经实际验证的 Windows 构建，避免提供无法确认能否安装、启动和更新的版本。
-
-当前已提交的 Windows 相关 Pull Request 不会被合并，包括 Windows 安装包、打包流程和相关运行时改动；这些改动可以保留在各自的独立分支中。
-
-需要 Windows 版本的用户请基于当前代码另行建立分支进行改造、构建和测试。暂不接受将这类改动合并到主分支，也不将其纳入正式发布。
-
-
-
-发布流程会检查应用图标、应用签名和 DMG 完整性，并提供 `SHA256SUMS.txt` 供核对下载文件。
+本仓库的 Windows 和 Apple 芯片 macOS 安装包通过各自的工作流构建。Windows 发布使用当前仓库 `main` 分支通过测试的构建，macOS 流程验证打包应用和 DMG。发布包附带 `SHA256SUMS.txt` 供核对下载文件。
 
 <p align="center">
-  <a href="https://github.com/chainfix/cike/releases/latest">下载 macOS 版</a> ·
+  <a href="https://github.com/smithwhere/cike/releases">查看发布包</a> ·
   <a href="#软件预览">软件预览</a> ·
   <a href="#安装与首次打开">安装说明</a> ·
-  <a href="https://github.com/chainfix/cike/issues">反馈问题</a>
+  <a href="https://github.com/smithwhere/cike/issues">反馈问题</a>
 </p>
 
 CIKE 是基于 Electron、Chromium 和 Playwright 的本地多环境浏览器。你可以为不同任务创建独立浏览器环境，分别保存登录状态、配置代理和浏览器参数，也可以通过本地 API 接入自动化脚本。
@@ -150,7 +142,7 @@ CIKE 是基于 Electron、Chromium 和 Playwright 的本地多环境浏览器。
 
 ## 下载
 
-前往 **[最新版本发布页](https://github.com/chainfix/cike/releases/latest)** 下载 DMG 安装包，也可下载 `.dmg.tar.gz` 后解压取得同一磁盘映像。
+前往 **[本仓库发布页](https://github.com/smithwhere/cike/releases)** 查找 macOS DMG 安装包，也可下载 `.dmg.tar.gz` 后解压取得同一磁盘映像。
 
 | 项目 | 当前支持情况 |
 | --- | --- |
@@ -248,7 +240,7 @@ curl -X POST 'http://127.0.0.1:4440/api/openBrowser' \
 需要 Node.js 22.12 或以上版本。
 
 ```bash
-git clone https://github.com/chainfix/cike.git
+git clone https://github.com/smithwhere/cike.git
 cd cike
 npm ci
 ```
@@ -262,11 +254,12 @@ npm run electron
 也可以单独启动本地 API 服务：
 
 ```bash
-npx playwright install chromium
 npm start
 ```
 
-如需使用已有的兼容 Chromium 可执行文件，可设置 `LFB_CHROMIUM_EXECUTABLE`。运行基础功能测试：
+首个 Chromium 环境启动时会安装锁定的 Chrome for Testing 稳定版（目前为 `158.0.8127.36`）。桌面版可在设置中安装该版本。同一数据目录同时只能由一个后端打开。需要同时运行桌面版和独立 API 时，可以为独立 API 设置单独的 `LFB_DATA`。
+
+如需使用已有的兼容 Chromium 可执行文件，可设置 `LFB_CHROMIUM_EXECUTABLE`。使用该变量指定上述稳定内核后运行基础功能测试：
 
 ```bash
 npm test
@@ -283,4 +276,4 @@ CIKE提供独立会话、代理和环境参数管理，未定制Chromium内核�
 
 ## 问题反馈
 
-请在 [Issues](https://github.com/chainfix/cike/issues) 中提供应用版本、macOS 版本、芯片型号、复现方式和报错截图。截图或日志中请遮盖 API Token、代理密码及个人信息。
+请在 [Issues](https://github.com/smithwhere/cike/issues) 中提供应用版本、系统版本、芯片型号、复现方式和报错截图。截图或日志中请遮盖 API Token、代理密码及个人信息。

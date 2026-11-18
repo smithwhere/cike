@@ -203,7 +203,10 @@ async function openProfileWithCheck(profileId) {
   if (!p) { toast('环境不存在', true); return; }
   if (p.fingerprintMode === 'kernel') {
     state.nativeCore = await window.lfb.nativeStatus();
-    if (!state.nativeCore.installed) { toast('请先在“设置 → Camoufox 指纹内核”下载内核', true); showPage('settings'); return; }
+    if (!state.nativeCore.installed) {
+      toast(state.nativeCore.canDownload === false ? '当前平台尚无可下载安装的 Camoufox 内核' : '请先在“设置 → Camoufox 指纹内核”下载内核', true);
+      showPage('settings'); return;
+    }
   } else if (!state.chromium?.installed) {
     toast('请先在“设置”里下载 Chromium 内核', true);
     return;
@@ -781,9 +784,10 @@ async function refreshNativeStatus() {
   const status = document.getElementById('native-status'), button = document.getElementById('btn-download-native');
   try {
     state.nativeCore = await window.lfb.nativeStatus();
-    status.textContent = state.nativeCore.installed ? '已安装 Camoufox ' + state.nativeCore.version : '尚未安装；原生一致/软件模拟仍使用 Chromium';
-    button.disabled = state.nativeCore.installed;
-    button.textContent = state.nativeCore.installed ? '指纹内核已安装' : '下载指纹内核';
+    status.textContent = state.nativeCore.installed ? '已安装 Camoufox ' + state.nativeCore.version
+      : state.nativeCore.canDownload === false ? '当前平台可使用 Chromium。内置 Camoufox 安装支持 Windows x64 和 Linux x64/ARM64。' : '尚未安装；原生一致/软件模拟仍使用 Chromium';
+    button.textContent = state.nativeCore.installed ? '指纹内核已安装'
+      : state.nativeCore.canDownload === false ? '当前平台暂无内核下载' : '下载指纹内核';
   } catch (error) { status.textContent = error.message; }
   syncKernelButtons();
 }

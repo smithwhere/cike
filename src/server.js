@@ -18,6 +18,7 @@ const net = require('net');
 const Koa = require('koa');
 const Router = require('@koa/router');
 const bodyParser = require('koa-bodyparser');
+const lockfile = require('proper-lockfile');
 
 const { ProfileStore } = require('./store');
 const { ProxyStore } = require('./proxystore');
@@ -349,20 +350,43 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
 
 /** Start listening; writes the discovery file. Returns { url, port, server, ...backend }. */
 async function startBackend(dataDir = DATA_DIR, options = {}) {
-  const backend = buildBackend(dataDir, options);
-  const port = await findFreePort(PORT_MIN, PORT_MAX);
-  const url = `http://127.0.0.1:${port}/`;
-  writePrivate(path.join(backend.dataDir, DISCOVERY_FILE), url + '\n');
-  const server = await new Promise((resolve, reject) => {
-    const s = backend.app.listen(port, '127.0.0.1', () => resolve(s));
-    s.once('error', reject);
-  });
-  backend.browsers.localAPIUrl = url;
-  return { ...backend, url, port, server };
+  const directory = fs.realpathSync(ensureDataDir(dataDir));
+  const release = await lockfile.lock(directory, { lockfilePath: path.join(directory, '.backend.lock'), stale: 60000 })
+    .catch(error => {
+      if (error.code === 'ELOCKED') throw Object.assign(new Error('此数据目录正在被另一个 CIKE 实例使用'), { code: 'ELOCKED' });
+      throw error;
+    });
+  let unlocked, server;
+  const unlock = () => unlocked ||= release();
+  try {
+    const backend = buildBackend(directory, options);
+    const port = await findFreePort(PORT_MIN, PORT_MAX);
+    const url = `http://127.0.0.1:${port}/`;
+    server = await new Promise((resolve, reject) => {
+      const listener = backend.app.listen(port, '127.0.0.1', () => resolve(listener));
+      listener.once('error', reject);
+    });
+    writePrivate(path.join(directory, DISCOVERY_FILE), url + '\n');
+    server.once('close', () => unlock().catch(error => console.error('[LocalAPI] release lock:', error.message)));
+    backend.browsers.localAPIUrl = url;
+    let stopping;
+    const closeBackend = () => stopping ||= (async () => {
+      await new Promise(resolve => {
+        server.close(resolve);
+        server.closeAllConnections();
+      });
+      await unlock();
+    })();
+    return { ...backend, url, port, server, closeBackend };
+  } catch (error) {
+    if (server) await new Promise(resolve => server.close(resolve));
+    await unlock();
+    throw error;
+  }
 }
 
 async function main() {
-  const b = await startBackend();
+  const b = await startBackend(DATA_DIR, { resolveChromium: () => require('../electron/chromium').downloadChromium(DATA_DIR) });
   console.log(`[LocalAPI] listening on ${b.url}`);
   console.log(`[LocalAPI] discovery file: ${path.join(b.dataDir, DISCOVERY_FILE)}`);
   console.log(`[LocalAPI] token file (0600): ${path.join(b.dataDir, TOKEN_FILE)}`);
@@ -371,8 +395,9 @@ async function main() {
   const shutdown = async () => {
     console.log('\n[LocalAPI] shutting down, closing browsers…');
     await b.browsers.closeAll().catch(() => {});
-    b.server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 5000).unref();
+    await b.closeBackend();
+    process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

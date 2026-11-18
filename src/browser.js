@@ -34,6 +34,7 @@ class BrowserManager {
     this.settings = settings;
     this.downloadsDirectory = options.downloadsDirectory;
     this.checkProxy = options.checkProxy || checkProxy;
+    this.resolveChromium = options.resolveChromium;
     this.sessions = new Map();
     this.opening = new Map();
     this.closing = new Map();
@@ -150,7 +151,10 @@ class BrowserManager {
       }
       // Deliberately no arbitrary LFB_EXTRA_ARGS: they could disable sandbox,
       // alter proxy routing or invalidate the native consistency contract.
-      if (process.env.LFB_CHROMIUM_EXECUTABLE) launchOptions.executablePath = process.env.LFB_CHROMIUM_EXECUTABLE;
+      if (!kernel) {
+        const executable = process.env.LFB_CHROMIUM_EXECUTABLE || await this.resolveChromium?.();
+        if (executable) launchOptions.executablePath = executable;
+      }
       checkCancelled();
       if (!kernel && !headless && this.profileIcons) {
         launchOptions.executablePath = await require('./profileapp').ensureProfileApp(this.store.dataDir, profile, launchOptions.executablePath || chromium.executablePath());

@@ -9,6 +9,7 @@ const { ZipFile } = require('yazl');
 const { defaultDataDirectory, curlRuntime } = require('../src/platform');
 const { extractBrowserZip } = require('../src/zip');
 const { cftPlatform, downloadUrl, findExecutable, browserVersion } = require('../electron/chromium');
+const CHROMIUM_VERSION = require('../src/chromium-version');
 
 async function fixtureZip(filename, name, contents, mode) {
   const zip = new ZipFile();
@@ -32,6 +33,7 @@ test('Windows stores data under the current user and uses system curl without in
 test('Windows downloads win64 Chromium and rejects unsupported architectures', () => {
   assert.equal(cftPlatform('win32', 'x64'), 'win64');
   assert.match(downloadUrl('win32', 'x64'), /\/win64\/chrome-win64\.zip$/);
+  assert.ok(downloadUrl('win32', 'x64').includes(`/${CHROMIUM_VERSION}/`));
   assert.throws(() => cftPlatform('win32', 'arm64'), /x64/);
   assert.equal(cftPlatform('darwin', 'arm64'), 'mac-arm64');
 });

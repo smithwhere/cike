@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { startBackend, DATA_DIR } = require('../src/server');
-const { chromiumStatus, downloadChromium, executableMarker } = require('./chromium');
+const { chromiumStatus, downloadChromium, resolveManagedChromium } = require('./chromium');
 const { checkUpdate, installUpdate } = require('./updater');
 const { nativeStatus, downloadNative, verifyNativeExecutable } = require('./nativecore');
 const { NativeStorage } = require('../src/native-storage');
@@ -36,14 +36,6 @@ ipcMain.on('connection-info', event => {
   try { trusted(event); event.returnValue = { apiBase: backend.url, token: backend.token }; }
   catch { event.returnValue = {}; }
 });
-
-// If Chromium was downloaded before, point the backend at it.
-function applyChromiumEnv() {
-  try {
-    const exe = fs.readFileSync(executableMarker(DATA_DIR), 'utf8').trim();
-    if (exe) process.env.LFB_CHROMIUM_EXECUTABLE = exe;
-  } catch { /* not downloaded yet */ }
-}
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -78,7 +70,6 @@ async function createWindow() {
 
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('io.cike.windows');
-  applyChromiumEnv();
   try {
     const requireSafeStorage = () => {
       if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储不可用，无法安全读取或迁移代理凭据');
@@ -89,6 +80,7 @@ app.whenReady().then(async () => {
         decrypt: value => { requireSafeStorage(); return safeStorage.decryptString(Buffer.from(value, 'base64')); },
       },
       resolveSystemProxy: url => session.defaultSession.resolveProxy(url), downloadsDirectory: app.getPath('downloads'),
+      resolveChromium: () => resolveManagedChromium(DATA_DIR),
     });
   } catch (err) {
     console.error('[CIKE] backend failed to start:', err.message);
@@ -116,8 +108,8 @@ app.on('before-quit', event => {
   Promise.resolve(backend.browsers.kernelTask).catch(() => {}).then(async () => {
     try { await within(() => backend.browsers.closeAll(), 8000); } catch {}
     await backend.browsers.forceStopAll();
-  }).finally(() => {
-    backend.server.closeAllConnections(); backend.server.close();
+  }).finally(async () => {
+    try { await backend.closeBackend(); } catch (error) { console.error('[CIKE] backend close:', error.message); }
     quitReady = true;
     if (reopenRequested) app.relaunch();
     app.exit(0);
@@ -205,7 +197,6 @@ handle('chromium-download', async (event) => {
   const send = progressSender(event, 'chromium-download-progress');
   return manageKernel(async () => {
     const exe = await downloadChromium(DATA_DIR, send);
-    process.env.LFB_CHROMIUM_EXECUTABLE = exe;
     return { ok: true, executable: exe };
   });
 });

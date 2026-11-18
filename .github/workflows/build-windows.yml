@@ -37,11 +37,11 @@ jobs:
       - run: npm run test:unit
       - name: Install and verify pinned native fingerprint core
         run: node scripts/install-native-ci.js
-      - run: npx playwright install chromium
       - name: Use full Chromium for regression tests
         shell: pwsh
         run: |
-          $browser = node -p "require('playwright').chromium.executablePath()"
+          $browser = node -e "const fs=require('fs'), os=require('os'), path=require('path'); require('./electron/chromium').downloadChromium(fs.mkdtempSync(path.join(os.tmpdir(),'cike-chromium-ci-'))).then(console.log).catch(error=>{console.error(error);process.exitCode=1})"
+          if ($LASTEXITCODE -ne 0 -or -not $browser) { exit 1 }
           "LFB_CHROMIUM_EXECUTABLE=$browser" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: npm test
       - name: Verify the requested detector with native hardware simulation

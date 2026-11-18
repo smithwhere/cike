@@ -8,10 +8,27 @@ const http = require('http');
 const { ProfileStore } = require('../src/store');
 const { ProxyStore } = require('../src/proxystore');
 const { BrowserManager } = require('../src/browser');
-const { buildBackend } = require('../src/server');
+const { buildBackend, startBackend } = require('../src/server');
 const { HOST_PLATFORM } = require('../src/fingerprint');
 const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cike-security-'));
 const provider = { encrypt: s => Buffer.from(s).toString('base64'), decrypt: s => Buffer.from(s, 'base64').toString() }; // codec fixture, not production encryption
+
+test('a backend holds the data-directory lock until shutdown', async () => {
+  const dir = temp();
+  let backend;
+  try {
+    backend = await startBackend(dir);
+    const first = backend.store.create({ name: 'first writer' });
+    await assert.rejects(startBackend(dir), { code: 'ELOCKED' });
+    await backend.closeBackend();
+    backend = await startBackend(dir);
+    assert.equal(backend.store.get(first.id).name, 'first writer');
+    assert.equal(backend.store.create({ name: 'second writer' }).sequence, first.sequence + 1);
+  } finally {
+    await backend?.closeBackend();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('legacy migration is explicit, credentials stay private, corrupt data fails closed', async () => {
   const dir = temp();

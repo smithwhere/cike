@@ -7,7 +7,7 @@ const https = require('https');
 const { execFile } = require('child_process');
 const { app } = require('electron');
 
-const REPO = 'chainfix/cike';
+const REPO = 'smithwhere/cike';
 const compare = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; };
 
 function get(url, file) {
@@ -26,12 +26,16 @@ async function checkUpdate() {
   const current = app.getVersion();
   if (process.platform === 'win32') return { current, latest: current, available: false,
     message: 'Windows 版暂不支持自动更新。请退出应用后，将新版解压到新目录；环境数据会保留。' };
-  const release = JSON.parse(await get(`https://api.github.com/repos/${REPO}/releases/latest`));
-  const version = release.tag_name?.replace(/^v/, '');
-  if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) throw new Error('更新版本格式无效');
-  const dmg = release.assets?.find(a => a.name === `CIKE-${version}-mac-arm64.dmg`);
-  const sums = release.assets?.find(a => a.name === 'SHA256SUMS.txt');
-  if (!dmg || !sums) throw new Error('最新版本缺少安装包或校验文件');
+  const releases = JSON.parse(await get(`https://api.github.com/repos/${REPO}/releases?per_page=100`));
+  const updates = releases.flatMap(release => {
+    if (release.draft || release.prerelease || !/^v?\d+\.\d+\.\d+$/.test(release.tag_name)) return [];
+    const version = release.tag_name.replace(/^v/, '');
+    const dmg = release.assets?.find(a => a.name === `CIKE-${version}-mac-arm64.dmg`);
+    const sums = release.assets?.find(a => a.name === 'SHA256SUMS.txt');
+    return dmg && sums ? [{ release, version, dmg, sums }] : [];
+  }).sort((a, b) => compare(b.version, a.version));
+  if (!updates.length) return { current, latest: current, available: false, message: '仓库尚无 macOS 安装包' };
+  const { release, version, dmg, sums } = updates[0];
   return { current, latest: version, available: compare(version, current) > 0, url: release.html_url, dmgUrl: dmg.browser_download_url, checksumUrl: sums.browser_download_url };
 }
 
@@ -42,8 +46,9 @@ async function installUpdate() {
   if (!info.available) return info;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-update-'));
   const dmg = path.join(dir, 'update.dmg');
-  await get(info.checksumUrl);
-  const expected = (await get(info.checksumUrl)).match(/^([a-f0-9]{64})\s+CIKE-[0-9.]+-mac-arm64\.dmg$/m)?.[1];
+  const filename = `CIKE-${info.latest}-mac-arm64.dmg`;
+  const entries = (await get(info.checksumUrl)).split(/\r?\n/).map(line => line.match(/^([a-f0-9]{64})\s+\*?(.+)$/));
+  const expected = entries.find(entry => entry?.[2] === filename)?.[1];
   if (!expected) throw new Error('更新校验文件无效');
   await get(info.dmgUrl, dmg);
   const actual = crypto.createHash('sha256').update(fs.readFileSync(dmg)).digest('hex');

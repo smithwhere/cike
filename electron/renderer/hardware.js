@@ -5,12 +5,12 @@ async function mountHardware(root, prefix, profile = {}) {
   const options = await hardwareOptionsPromise;
   if (!root.isConnected) return;
   const kernel = profile.fingerprintMode === 'kernel', hardware = profile.fingerprintMode === 'hardware', simulated = kernel || hardware;
-  const choices = (values, selected) => values.map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${value}</option>`).join('');
+  const choices = (values, selected, label = String) => values.map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label(value)}</option>`).join('');
   root.innerHTML = `
     <div class="field"><label>指纹策略</label><select id="${prefix}-fingerprint-mode" class="input"><option value="native" ${simulated ? '' : 'selected'}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
     <div id="${prefix}-hardware-fields" class="${simulated ? '' : 'hidden'}">
       <div class="field-row"><div class="field"><label>CPU 线程数</label><select id="${prefix}-hardware-cpu" class="input">${choices(options.cpus, profile.hardwareConcurrency || 8)}</select></div>
-      <div id="${prefix}-software-memory" class="field ${kernel ? 'hidden' : ''}"><label>网页内存值（GB）</label><select id="${prefix}-hardware-memory" class="input">${choices(options.memories, profile.deviceMemory || 8)}</select></div></div>
+      <div id="${prefix}-software-memory" class="field ${kernel ? 'hidden' : ''}"><label>网页内存值（GB）</label><select id="${prefix}-hardware-memory" class="input">${choices(options.memories, profile.deviceMemory || 8, value => value >= 48 ? `${value}（测试值）` : value)}</select></div></div>
       <div class="field"><label>显卡标识</label><select id="${prefix}-hardware-gpu" class="input">${options.gpus.map(gpu => `<option value="${esc(gpu.id)}" ${gpu.id === (profile.gpuPreset || 'native') ? 'selected' : ''}>${esc(gpu.name)}</option>`).join('')}</select></div>
       <div class="field"><label for="${prefix}-user-agent">User-Agent</label><select id="${prefix}-user-agent" class="input"></select></div>
       <div id="${prefix}-software-noise" class="field-row ${kernel ? 'hidden' : ''}"><div class="field"><label>Canvas 读取</label><select id="${prefix}-hardware-canvas" class="input"><option value="yes" ${!hardware || profile.canvasNoise ? 'selected' : ''}>按环境固定处理</option><option value="no" ${hardware && !profile.canvasNoise ? 'selected' : ''}>原生输出</option></select></div>
@@ -32,9 +32,9 @@ async function mountHardware(root, prefix, profile = {}) {
     const presets = options.userAgents?.[mode] || [];
     userAgent.replaceChildren(new Option('内核原生 UA', ''));
     if (presets.length) {
-      userAgent.add(new Option('保存时随机分配', 'random'));
-      for (const [label, value] of presets) userAgent.add(new Option(label, value));
-      userAgent.value = selectedUserAgents[mode] ?? (profile.id ? '' : 'random');
+      userAgent.add(new Option('在默认内核同主版本中随机分配', 'random'));
+      for (const [label, value] of presets) userAgent.add(new Option(`${label}（测试预设）`, value));
+      userAgent.value = selectedUserAgents[mode] ?? '';
     }
   };
   userAgent.onchange = () => { selectedUserAgents[field('fingerprint-mode').value] = userAgent.value; };

@@ -41,15 +41,16 @@ const GPU_PRESETS = {
 };
 const RANDOM_CPU_VALUES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32];
 const CPU_VALUES = [2, ...RANDOM_CPU_VALUES];
-const RANDOM_MEMORY_VALUES = [4, 8, 16, 32, 48, 64, 96];
-const MEMORY_VALUES = [0.5, 1, 2, ...RANDOM_MEMORY_VALUES];
+const MEMORY_VALUES = [0.5, 1, 2, 4, 8, 16, 32, 48, 64, 96];
+const RANDOM_MEMORY_VALUES = [4, 8];
 function hardwareOptions() {
   return { cpus: CPU_VALUES, memories: MEMORY_VALUES,
     gpus: Object.entries(GPU_PRESETS).map(([id, gpu]) => ({ id, name: gpu.name })) };
 }
-function generateHardware() {
+function generateHardware(platform = process.platform, arch = process.arch) {
   const choose = list => list[crypto.randomInt(list.length)];
-  const gpuPreset = choose(Object.keys(GPU_PRESETS).filter(id => id !== 'native'));
+  const gpuChoices = Object.keys(GPU_PRESETS).filter(id => id !== 'native' && id.startsWith('apple-') === (platform === 'darwin'));
+  const gpuPreset = platform === 'darwin' && arch !== 'arm64' ? 'native' : choose(gpuChoices);
   return { fingerprintMode: 'hardware', hardwareConcurrency: choose(RANDOM_CPU_VALUES), deviceMemory: choose(RANDOM_MEMORY_VALUES),
     gpuPreset, canvasNoise: true, audioNoise: true, fingerprintSeed: crypto.randomBytes(16).toString('hex') };
 }

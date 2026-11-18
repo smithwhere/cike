@@ -51,7 +51,7 @@ class ProfileStore {
     const record = completeHardware({ ...structuredClone(DEFAULT_SPEC), ...pick(spec), id,
       name: String(spec.name || '').trim() || String(sequence), sequence,
       viewport: { ...DEFAULT_SPEC.viewport, ...spec.viewport }, createdAt: now, updatedAt: now }, spec);
-    record.userAgent = resolveUserAgent(record, Object.hasOwn(spec, 'userAgent') ? record.userAgent : 'random');
+    record.userAgent = resolveUserAgent(record, record.userAgent);
     validateProfile(record);
     if (record.proxy) validateInlineProxy(record.proxy);
     this.sequence = sequence;

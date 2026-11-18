@@ -4,7 +4,7 @@ let nativeLibrary = null;
 function syncKernelButtons() {
   const locked = kernelUiBusy || nativeLibrary?.busy || nativeLibrary?.inUse;
   for (const button of document.querySelectorAll('.native-storage-action')) button.disabled = !!locked || button.dataset.readonly === 'true';
-  document.getElementById('btn-download-native').disabled = !!locked || !!state.nativeCore?.installed;
+  document.getElementById('btn-download-native').disabled = !!locked || !!state.nativeCore?.installed || state.nativeCore?.canDownload === false;
   document.getElementById('btn-download-browser').disabled = !!locked || !!(state.chromium?.installed && !state.chromium?.updateAvailable);
 }
 function setKernelUiBusy(value) { kernelUiBusy = value; syncKernelButtons(); }
