@@ -63,6 +63,13 @@ function fittedWindowsWindowPosition(viewport, workArea) {
   return { x: workArea.x + WINDOW_OFFSET, y: workArea.y + WINDOW_OFFSET };
 }
 
+function fitWindowsDisplay(display, workArea) {
+  const preset = PRESETS.find(option => option.id === display.preset);
+  const scale = availableScales(preset).find(scale =>
+    scale >= display.scale && fitsWindowsWindow(displayOptions(preset, scale).viewport, workArea));
+  return scale === undefined ? null : { preset: preset.id, scale };
+}
+
 function randomWindowOptions(platform, previous, workArea) {
   let pool = RANDOM_DISPLAYS;
   if (platform === 'win' && workArea) {
@@ -94,4 +101,4 @@ function emulatedDisplay(display, platform) {
   return displayOptions(preset, display.scale);
 }
 
-module.exports = { displayCatalog, emulatedDisplay, randomWindowOptions, fittedWindowsWindowPosition };
+module.exports = { displayCatalog, emulatedDisplay, randomWindowOptions, fitWindowsDisplay, fittedWindowsWindowPosition };

@@ -75,6 +75,8 @@ Firefox 的原生窗口和自动化协议里的页面目标并非一一对应。
 
 随机新建环境时，CIKE 从全部内置显示预设及其支持的缩放档位中选取组合。候选组合的视口加上标题栏、工具栏和边框预留后，必须能放进管理窗口所在显示器的可用工作区。没有合适预设时，窗口尺寸跟随系统。
 
+手动选定的显示预设会保留分辨率和设置的缩放。打开窗口时，如果设定的尺寸放不下，CIKE 会从该预设支持的缩放档位中，选择能完整显示视口、标题栏、工具栏和边框的最低档，应用于本次启动。没有合适的档位时，界面会提示选择较小的分辨率或跟随系统。
+
 同一设置区还提供 61 个语言区域和 64 个时区选项，以及网页外观、动画偏好、对比度偏好和强制配色。打开环境检测页中的“当前网页读到的参数”，可以核对 UA、CSS 屏幕、视口、DPR、语言列表、CPU／网页内存、外观、WebGL／WebGPU、常见字体、编解码格式、连接估计和该页定位权限。读数在本页计算，可离线查看。通过「检测出口 IP」手动查询公网出口和地区。参数参考 [Unicode CLDR](https://cldr.unicode.org/translation/translation-guide-general/default-content)、[IANA 时区数据库](https://www.iana.org/time-zones)、[CSS 强制配色](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/%40media/forced-colors) 和 [Windows 11 字体清单](https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list)。
 
 ## 数据和更新

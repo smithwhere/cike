@@ -90,7 +90,7 @@ async function mountHardware(root, prefix, profile = {}) {
       const ratio = activeScale / 100;
       const width = Math.floor(selected.width / ratio), height = Math.floor(selected.height / ratio);
       const reference = selected.specs ? `硬件参考 ${selected.specs}。` : '';
-      summary.textContent = `CSS 屏幕与视口 ${width}×${height}，DPR ${ratio}。测试窗口使用固定视口。${reference}`;
+      summary.textContent = `设定的 CSS 屏幕与视口 ${width}×${height}，DPR ${ratio}。窗口放不下时，打开会自动提高到可完整显示的最低缩放档。${reference}`;
     };
     preset.onchange = scale.onchange = () => syncDisplay(Number(scale.value));
     syncDisplay(profile.display?.scale ?? 100);

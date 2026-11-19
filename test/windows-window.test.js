@@ -59,6 +59,33 @@ for (const engine of ['Chromium', 'Camoufox']) {
   });
 }
 
+test('Windows fits a saved display to the work area at the lowest supported scale',
+  { skip: process.platform !== 'win32', timeout: 90000 }, async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-display-autofit-'));
+    const store = new ProfileStore(root);
+    let workArea = { x: 0, y: 0, width: 1920, height: 1040 };
+    const manager = new BrowserManager(store, null, new Settings(root), {
+      startPage: false, downloadsDirectory: path.join(root, 'Downloads'), getDisplayWorkArea: () => workArea,
+    });
+    const requested = { preset: 'qhd', scale: 100 };
+    try {
+      const profile = store.create({ display: requested });
+      await manager.open(profile.id);
+      const page = manager.getContext(profile.id).pages()[0];
+      assert.deepEqual(await page.evaluate(() => [screen.width, screen.height, innerWidth, innerHeight, devicePixelRatio]),
+        [1462, 822, 1462, 822, 1.75]);
+      assert.deepEqual(new ProfileStore(root).get(profile.id).display, requested);
+      await manager.close(profile.id);
+
+      workArea = { x: 0, y: 0, width: 800, height: 600 };
+      await assert.rejects(manager.open(profile.id), { status: 409 });
+      assert.equal(manager.isOpen(profile.id), false);
+      await manager.open(profile.id, { headless: true });
+      assert.deepEqual(await manager.getContext(profile.id).pages()[0].evaluate(() => [innerWidth, innerHeight, devicePixelRatio]),
+        [2560, 1440, 1]);
+    } finally { await manager.closeAll(); fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
 test('Windows maximizes new profiles, inherits F11 fullscreen in new windows and remembers it after restart',
   { skip: process.platform !== 'win32', timeout: 90000 }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-window-state-'));

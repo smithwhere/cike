@@ -13,7 +13,7 @@ const { chromiumBrowsingSwitches } = require('./chromium-browsing');
 const { privateDirectory } = require('./privatefiles');
 const { prepareDownloads, configureDownloads } = require('./downloads');
 const { WindowStateManager } = require('./windowstate');
-const { fittedWindowsWindowPosition } = require('./display-presets');
+const { fitWindowsDisplay, fittedWindowsWindowPosition } = require('./display-presets');
 const { launchWithGraphics } = require('./native-graphics');
 const { within, stopContext, forceStopContext, ownedBrowser } = require('./browser-lifecycle');
 
@@ -132,6 +132,11 @@ class BrowserManager {
       if (proxy) proxy.bypass = '<-loopback>';
       const kernel = profile.fingerprintMode === 'kernel';
       if (kernel && process.env.LFB_EXPOSE_DEBUGGER === '1') throw new Error('Camoufox 使用 Firefox 协议，不提供 Chromium CDP 调试端口');
+      const workArea = !headless && process.platform === 'win32' && profile.display ? this.getDisplayWorkArea?.() : null;
+      if (workArea) {
+        effective.display = fitWindowsDisplay(profile.display, workArea);
+        if (!effective.display) throw Object.assign(new Error('当前屏幕的可用区域放不下此显示预设，请选择较小的分辨率或跟随系统'), { status: 409 });
+      }
       const { options, display } = buildContextOptions({ ...effective, proxy });
       const manageWindows = !display && !headless && process.platform === 'win32' && !kernel;
       const debugPort = !kernel && process.env.LFB_EXPOSE_DEBUGGER === '1' ? await findFreePort(4550, 4599) : null;
@@ -155,8 +160,8 @@ class BrowserManager {
         launchOptions.args.push(state === 'fullscreen' ? '--start-fullscreen' : state === 'maximized'
           ? '--start-maximized' : `--window-size=${profile.viewport.width},${profile.viewport.height}`);
       }
-      if (display && !kernel && !headless && process.platform === 'win32' && !profile.lastOpenedAt) {
-        const position = fittedWindowsWindowPosition(display.viewport, this.getDisplayWorkArea?.());
+      if (display && !kernel && workArea) {
+        const position = fittedWindowsWindowPosition(display.viewport, workArea);
         if (position) launchOptions.args.push(`--window-position=${position.x},${position.y}`);
       }
       // Deliberately no arbitrary LFB_EXTRA_ARGS: they could disable sandbox,
@@ -248,7 +253,11 @@ class BrowserManager {
       checkCancelled();
       if (graphicsFallback) this.settings?.rememberCamoufoxSoftware();
       this.store.recordOpened(id, networkCheck.current() ? session.network : null);
-      const warning = [graphicsFallback ? '检测到 GPU/D3D11 启动失败，已自动使用兼容绘制' : null, this.windowWarning(id)].filter(Boolean).join('；');
+      const warning = [
+        effective.display?.scale !== profile.display?.scale ? `本次显示缩放已自动调整为 ${effective.display.scale}%` : null,
+        graphicsFallback ? '检测到 GPU/D3D11 启动失败，已自动使用兼容绘制' : null,
+        this.windowWarning(id),
+      ].filter(Boolean).join('；');
       return { profile_id: id, open: true, reused: false, headless, network,
         ...(graphicsMode ? { graphicsMode } : {}),
         ...(warning ? { warning } : {}),
