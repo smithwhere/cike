@@ -66,12 +66,9 @@ function fittedWindowsWindowPosition(viewport, workArea) {
 function randomWindowOptions(platform, previous, workArea) {
   let pool = RANDOM_DISPLAYS;
   if (platform === 'win' && workArea) {
-    const fits = choice => fitsWindowsWindow(emulatedDisplay(choice, 'win').viewport, workArea);
-    pool = pool.filter(fits);
-    // Compact work areas may need higher scaling or smaller catalogue presets.
-    if (pool.length < 2) {
-      pool = PRESETS.flatMap(preset => availableScales(preset).map(scale => ({ preset: preset.id, scale }))).filter(fits);
-    }
+    pool = PRESETS.flatMap(preset => availableScales(preset)
+      .filter(scale => fitsWindowsWindow(displayOptions(preset, scale).viewport, workArea))
+      .map(scale => ({ preset: preset.id, scale })));
     if (!pool.length) {
       return { display: null, deviceScaleFactor: 1, viewport: {
         width: Math.max(MIN_CSS_SIZE, Math.min(1280, workArea.width - WINDOW_FRAME.width)),

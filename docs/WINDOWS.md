@@ -73,7 +73,7 @@ Firefox 的原生窗口和自动化协议里的页面目标并非一一对应。
 
 选中测试预设的环境使用固定视口，独立于自动最大化和全屏继承。Camoufox 中网页明确指定了弹窗宽高时，弹窗以该宽高作为视口，仍沿用环境的屏幕尺寸和 DPR。面板、色域、HDR 和刷新率是典型产品规格，实际硬件状态由系统和浏览器决定。选择“跟随系统”可恢复普通窗口行为。2026 年 10 月分辨率参考 [Steam 硬件调查](https://store.steampowered.com/hwsurvey/hw/) 和 [Statcounter 桌面屏幕统计](https://gs.statcounter.com/screen-resolution-stats/desktop)。
 
-随机新建环境时，CIKE 按管理窗口所在显示器的可用工作区筛选预设，给浏览器标题栏、工具栏和窗口边框留出空间。屏幕较小时会从适合的紧凑预设中随机选取。没有合适预设时，窗口尺寸跟随系统。
+随机新建环境时，CIKE 从全部内置显示预设及其支持的缩放档位中选取组合。候选组合的视口加上标题栏、工具栏和边框预留后，必须能放进管理窗口所在显示器的可用工作区。没有合适预设时，窗口尺寸跟随系统。
 
 同一设置区还提供 61 个语言区域和 64 个时区选项，以及网页外观、动画偏好、对比度偏好和强制配色。打开环境检测页中的“当前网页读到的参数”，可以核对 UA、CSS 屏幕、视口、DPR、语言列表、CPU／网页内存、外观、WebGL／WebGPU、常见字体、编解码格式、连接估计和该页定位权限。读数在本页计算，可离线查看。通过「检测出口 IP」手动查询公网出口和地区。参数参考 [Unicode CLDR](https://cldr.unicode.org/translation/translation-guide-general/default-content)、[IANA 时区数据库](https://www.iana.org/time-zones)、[CSS 强制配色](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/%40media/forced-colors) 和 [Windows 11 字体清单](https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list)。
 

@@ -47,24 +47,39 @@ test('Windows display presets produce CSS sizes and DPR without changing the nat
 
 test('random Windows displays fit the work area with room for the browser frame', t => {
   let choice = 0;
-  t.mock.method(require('node:crypto'), 'randomInt', size => Math.min(choice, size - 1));
+  let poolSize;
+  t.mock.method(require('node:crypto'), 'randomInt', size => {
+    poolSize = size;
+    return choice;
+  });
+  const candidatesFor = workArea => {
+    choice = 0;
+    randomWindowOptions('win', null, workArea);
+    return Array.from({ length: poolSize }, (_, index) => {
+      choice = index;
+      return randomWindowOptions('win', null, workArea).display;
+    });
+  };
+  const combinations = displayCatalog('win').presets.flatMap(({ id, width, height, scales }) =>
+    scales.map(scale => ({
+      display: { preset: id, scale },
+      outerWidth: Math.floor(width * 100 / scale) + 32,
+      outerHeight: Math.floor(height * 100 / scale) + 160,
+    })));
   const desktop = { width: 1920, height: 1040 };
-  const first = randomWindowOptions('win', null, desktop);
-  assert.deepEqual(first.display, { preset: 'hd', scale: 100 });
-  choice = 100;
-  const second = randomWindowOptions('win', first.display, desktop);
-  assert.deepEqual(second.display, { preset: 'fhd', scale: 125 });
-  assert.deepEqual(second.viewport, { width: 1536, height: 864 });
-
-  const small = { width: 1366, height: 728 };
-  const compact = randomWindowOptions('win', null, small);
-  const alternative = randomWindowOptions('win', compact.display, small);
-  assert.notDeepEqual(compact.display, alternative.display);
-  for (const option of [compact, alternative]) {
-    assert.ok(option.display);
-    assert.ok(option.viewport.width <= 1334);
-    assert.ok(option.viewport.height <= 568);
+  const short = { width: 1920, height: 930 };
+  for (const area of [desktop, short, { width: 1366, height: 728 }, { width: 6000, height: 2600 }]) {
+    const expected = combinations.filter(({ outerWidth, outerHeight }) => outerWidth <= area.width && outerHeight <= area.height);
+    assert.deepEqual(candidatesFor(area), expected.map(({ display }) => display));
   }
+
+  const highResolution = { preset: '3k2', scale: 250 };
+  assert.ok(candidatesFor(desktop).some(({ preset, scale }) => preset === '3k2' && scale === 250));
+  assert.ok(!candidatesFor(short).some(({ preset, scale }) => preset === '3k2' && scale === 250));
+  choice = 0;
+  const first = randomWindowOptions('win', null, desktop);
+  assert.notDeepEqual(randomWindowOptions('win', first.display, desktop).display, first.display);
+  assert.deepEqual(emulatedDisplay(highResolution, 'win').viewport, { width: 1280, height: 800 });
   assert.equal(randomWindowOptions('win', null, { width: 340, height: 440 }).display, null);
 });
 
