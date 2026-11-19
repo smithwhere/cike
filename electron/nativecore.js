@@ -37,7 +37,10 @@ async function install(dir, onProgress) {
         await downloadFile(source, archive, onProgress, 0, 2 * 1024 * 1024 * 1024);
         break;
       } catch (error) {
-        if (source === sources.at(-1) || !/HTTP (?:404|5\d\d)|ECONNRESET|ETIMEDOUT|超时/i.test(error.message)) throw error;
+        const unavailable = /HTTP (?:404|5\d\d)|ECONNRESET|ETIMEDOUT|超时/i.test(error.message);
+        // The public asset API can return 403 or 429 before the backup is tried.
+        const apiLimited = source === asset.apiUrl && /HTTP (?:403|429)\b/.test(error.message);
+        if (source === sources.at(-1) || (!unavailable && !apiLimited)) throw error;
         fs.rmSync(archive, { force: true });
         onProgress?.({ pct: 0, phase: '正在尝试备用下载地址…' });
       }
