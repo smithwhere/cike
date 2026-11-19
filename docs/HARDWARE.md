@@ -32,12 +32,16 @@
 - CPU 线程数可选 2、4、6、8、10、12、14、16、18、20、22、24、28、32。随机生成从 4 线程起取值。22 线程规格参考 [Intel Core Ultra 7 155H](https://www.intel.com/content/www/us/en/products/sku/236847/intel-core-ultra-7-processor-155h-24m-cache-up-to-4-80-ghz/specifications.html)。
 - 网页内存默认由内核报告。软件层手动测试分为桌面常用的 2、4、8、16、32 GiB 和兼容性测试值 0.5、1、48、64、96 GiB。手动选择仅改变 JavaScript 的 `deviceMemory`，请求头由内核按站点协商。[Chrome 147 内存分档](https://developer.chrome.com/release-notes/147#update_device_memory_api_limits)
 - 软件层可以选原生显卡或当前平台的测试标识。Apple Silicon 提供 Apple 预设，Windows 和 Linux 提供 Intel、NVIDIA、AMD 预设。Intel Mac 自动创建时使用原生显卡。
-- UA 默认使用内核原生值。手动选项按当前主版本和历史版本分组，用于兼容性测试。检测页可核对实际内核版本、UA、平台及浏览器公开的 Client Hints。
+- UA 默认使用内核原生值。手动选项按当前主版本和其他版本分组，用于兼容性测试。检测页可核对实际内核版本、UA、平台及浏览器公开的 Client Hints。
 - Canvas 读取可选按环境固定处理或原生输出。音频使用内核原生读写。
 
 首次保存会生成固定的环境种子。更名、修改代理、关闭重开或重启 CIKE 不会自动更换种子。点击“生成另一组”可以重新生成参数和种子；修改后需要关闭并重新打开环境。
 
-桌面端新建环境默认保存一组 CPU、适用的显卡标识及 Canvas 种子。Windows 同时抽取显示预设。选择「新建独立环境并打开」可一次保存并启动一份独立环境。自动创建时 UA、内存、音频、插件和字体采用原生读数。
+桌面端每次新建环境默认抽取 CPU、网页内存、可用的当前内核 UA 与显卡预设、窗口尺寸与缩放、同地区的语言和时区，以及网页外观、动画、对比度和强制配色。Windows 使用配套的屏幕预设。每份配置包含新的 Canvas 种子，创建后关闭重开仍使用保存的配置。选择「新建独立环境并打开」可一次保存并启动。音频、插件和字体使用原生读数，代理与 WebRTC 网络策略由用户选择。
+
+当前内核有多个 UA 预设时，默认创建会避开上一份环境的 UA。传统 `User-Agent` 请求头和 `navigator.userAgent` 使用保存的预设，`Sec-CH-UA` 和 `navigator.userAgentData` 使用内核值。
+
+Windows 的软件层模式提供 30 个手动 UA 预设，包括 Chrome 10 个、Edge 9 个、Opera 8 个和 Vivaldi 3 个。版本覆盖 2026 年 7 月底至 11 月的稳定渠道和部分预览渠道。完整版本号和 Vivaldi 品牌标记属于兼容性测试格式。Chromium 158 的自动抽取范围为其中 6 个。旧环境编辑时仍可选择已保存的 UA。版本参考 [Chrome 发布记录](https://chromereleases.googleblog.com/)、[Edge 发布排期](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-release-schedule)、[Edge Beta 发布记录](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-relnote-beta-channel)、[Opera 发布记录](https://blogs.opera.com/desktop/) 和 [Vivaldi 桌面发布记录](https://vivaldi.com/blog/desktop/)。
 
 本地 HTTP API 可在创建环境时传入 `fingerprintMode: "random"`，省略时使用原生一致。切换策略时 Cookie 和站点数据由所选内核的环境目录保存。升级后的软件层和内核模式使用原生音频，已有的跨平台或内核不兼容显卡预设会改用原生显卡。
 
@@ -53,6 +57,8 @@
 | RECTS | 多行文字布局、屏幕可用区域、视口和 DPR |
 
 第三方检测页可以选择不同的输入和摘要算法。对照环境设置时以本地检测页的原始读数和固定样本为准。
+
+在环境检测页点击「本地合成样本」，可以离线查看 PLUGINS、RECTS、FONTS 和 AUDIO 的合成数据和摘要。选中两个独立环境并点击「对比」，页面并排显示摘要，逐项标明相同或不同。已关闭的环境也可选择。样本由环境 ID 固定生成，关闭重开后可复现。本地样本页只展示测试数据。
 
 ## 实现范围
 

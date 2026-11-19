@@ -1,5 +1,5 @@
 'use strict';
-const { randomInt } = require('node:crypto');
+const crypto = require('node:crypto');
 
 // October 2026 Steam/Statcounter surveys and representative display specifications.
 const PRESETS = [
@@ -26,7 +26,7 @@ const PRESETS = [
 ];
 const SCALES = [100, 125, 150, 175, 200, 225, 250, 300];
 const MIN_CSS_SIZE = 320;
-const RANDOM_WINDOWS_DISPLAYS = [
+const RANDOM_DISPLAYS = [
   { preset: 'hd', scale: 100 }, { preset: 'fhd', scale: 100 }, { preset: 'fhd', scale: 125 },
   { preset: 'qhd', scale: 100 }, { preset: 'qhd', scale: 125 }, { preset: 'wqxga', scale: 125 },
   { preset: 'wuxga', scale: 125 }, { preset: 'uhd', scale: 175 },
@@ -41,10 +41,21 @@ function displayCatalog(platform) {
   return { presets: PRESETS.map(preset => ({ ...preset, scales: availableScales(preset) })), scales: SCALES };
 }
 
-function randomDisplay(platform, previous) {
-  if (platform !== 'win') return null;
-  const choices = RANDOM_WINDOWS_DISPLAYS.filter(({ preset, scale }) => preset !== previous?.preset || scale !== previous?.scale);
-  return { ...choices[randomInt(choices.length)] };
+function displayOptions(preset, scale) {
+  const deviceScaleFactor = scale / 100;
+  const screen = {
+    width: Math.floor(preset.width / deviceScaleFactor),
+    height: Math.floor(preset.height / deviceScaleFactor),
+  };
+  return { screen, viewport: { ...screen }, deviceScaleFactor };
+}
+
+function randomWindowOptions(platform, previous) {
+  const choices = RANDOM_DISPLAYS.filter(({ preset, scale }) => preset !== previous?.preset || scale !== previous?.scale);
+  const display = choices[crypto.randomInt(choices.length)];
+  const preset = PRESETS.find(option => option.id === display.preset);
+  const { viewport, deviceScaleFactor } = displayOptions(preset, display.scale);
+  return { display: platform === 'win' ? { ...display } : null, viewport, deviceScaleFactor };
 }
 
 function emulatedDisplay(display, platform) {
@@ -53,12 +64,7 @@ function emulatedDisplay(display, platform) {
   if (platform !== 'win' || !preset || !availableScales(preset).includes(display.scale) || Object.keys(display).length !== 2) {
     throw Object.assign(new Error('请选择有效的 Windows 显示测试预设和缩放比例'), { status: 400 });
   }
-  const deviceScaleFactor = display.scale / 100;
-  const screen = {
-    width: Math.floor(preset.width / deviceScaleFactor),
-    height: Math.floor(preset.height / deviceScaleFactor),
-  };
-  return { screen, viewport: { ...screen }, deviceScaleFactor };
+  return displayOptions(preset, display.scale);
 }
 
-module.exports = { displayCatalog, emulatedDisplay, randomDisplay };
+module.exports = { displayCatalog, emulatedDisplay, randomWindowOptions };

@@ -38,9 +38,28 @@ const TIMEZONES = [
   'Australia/Sydney', 'Australia/Adelaide', 'Australia/Darwin', 'Pacific/Auckland',
 ];
 
+const REGION_PRESETS = [
+  [COUNTRY_LOCALE.US, 'America/New_York'],
+  [COUNTRY_LOCALE.US, 'America/Los_Angeles'],
+  [COUNTRY_LOCALE.CA, 'America/Toronto'],
+  [COUNTRY_LOCALE.MX, 'America/Mexico_City'],
+  [COUNTRY_LOCALE.BR, 'America/Sao_Paulo'],
+  [COUNTRY_LOCALE.GB, 'Europe/London'],
+  [COUNTRY_LOCALE.DE, 'Europe/Berlin'],
+  [COUNTRY_LOCALE.FR, 'Europe/Paris'],
+  [COUNTRY_LOCALE.ES, 'Europe/Madrid'],
+  [COUNTRY_LOCALE.IN, 'Asia/Kolkata'],
+  [COUNTRY_LOCALE.CN, 'Asia/Shanghai'],
+  [COUNTRY_LOCALE.TW, 'Asia/Taipei'],
+  [COUNTRY_LOCALE.JP, 'Asia/Tokyo'],
+  [COUNTRY_LOCALE.KR, 'Asia/Seoul'],
+  [COUNTRY_LOCALE.SG, 'Asia/Singapore'],
+  [COUNTRY_LOCALE.AU, 'Australia/Sydney'],
+];
+
 function localeForCountry(countryCode) {
   if (!countryCode) return null;
   return COUNTRY_LOCALE[countryCode.toUpperCase()] || null;
 }
 
-module.exports = { localeForCountry, COUNTRY_LOCALE, LOCALES, TIMEZONES };
+module.exports = { localeForCountry, COUNTRY_LOCALE, LOCALES, TIMEZONES, REGION_PRESETS };

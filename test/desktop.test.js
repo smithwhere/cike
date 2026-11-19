@@ -8,6 +8,7 @@ const { _electron } = require('playwright');
 const { ProfileStore } = require('../src/store');
 const { ProxyStore } = require('../src/proxystore');
 const { NativeStorage, binary } = require('../src/native-storage');
+const { currentUserAgents, userAgentPresets } = require('../src/user-agents');
 const { BUILD } = require('../src/nativecore');
 
 test('sandboxed desktop UI can authenticate, migrate profiles and protect secrets with safeStorage', { timeout: 120000 }, async () => {
@@ -68,6 +69,12 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.locator('#n-fingerprint-mode').waitFor();
     assert.equal(await page.locator('#n-fingerprint-mode').inputValue(), 'random');
     await page.locator('#n-fingerprint-mode').selectOption('hardware');
+    const currentAgents = page.locator('#n-user-agent optgroup[label="当前主版本测试"] option');
+    assert.deepEqual(await currentAgents.evaluateAll(options => options.map(option => [option.label, option.value])),
+      currentUserAgents({ platform: p.platform, fingerprintMode: 'hardware' }));
+    const visibleAgents = page.locator('#n-user-agent optgroup option');
+    assert.deepEqual(new Set(await visibleAgents.evaluateAll(options => options.map(option => option.value))),
+      new Set(userAgentPresets(p.platform, { includeLegacy: false }).hardware.map(([, value]) => value)));
     await page.locator('#n-hardware-generate').click();
     await page.waitForFunction(() => document.querySelector('#n-fingerprint-seed')?.value.length === 32);
     await page.locator('#n-hardware-cpu').selectOption('4');
@@ -250,17 +257,21 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     for (let i = 0; i < 2; i++) {
       await page.getByRole('button', { name: '新建独立环境', exact: true }).click();
       assert.equal(await page.locator('#n-fingerprint-mode').inputValue(), 'random');
+      assert.equal(await page.locator('#n-locale').isVisible(), false);
+      assert.equal(await page.locator('#n-vp').isVisible(), false);
       const created = page.waitForResponse(response => response.url().endsWith('/api/profiles') && response.request().method() === 'POST');
-      if (process.env.LFB_CHROMIUM_EXECUTABLE) {
+      const openAfter = i === 1 && process.env.LFB_CHROMIUM_EXECUTABLE;
+      if (openAfter) {
         await page.getByRole('button', { name: '新建独立环境并打开', exact: true }).click();
       } else {
         await page.locator('#n-save').click();
       }
       const response = await created;
       assert.equal(response.status(), 200);
+      assert.deepEqual(response.request().postDataJSON(), { group: '', fingerprintMode: 'random', proxyId: null, webrtc: 'auto' });
       const fresh = (await response.json()).profile;
       generated.push(fresh);
-      if (process.env.LFB_CHROMIUM_EXECUTABLE) {
+      if (openAfter) {
         const card = page.locator('.env-card').filter({ has: page.getByText(String(fresh.sequence), { exact: true }) });
         await card.getByText('运行中', { exact: true }).waitFor({ timeout: 30000 });
         const permissions = page.waitForResponse(item => item.url().endsWith(`/api/profiles/${fresh.id}/sitePermissions`));
@@ -272,9 +283,18 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       }
       await page.locator('#page-profiles').waitFor({ state: 'visible' });
     }
-    assert.ok(generated.every(profile => profile.fingerprintMode === 'hardware' && profile.userAgent === null && profile.deviceMemory === null));
+    for (const profile of generated) {
+      assert.equal(profile.fingerprintMode, 'hardware');
+      assert.ok([4, 8, 16, 32].includes(profile.deviceMemory));
+      const agents = currentUserAgents(profile);
+      assert.ok(agents.length ? agents.some(([, value]) => value === profile.userAgent) : profile.userAgent === null);
+      assert.notEqual(profile.locale, 'auto');
+      assert.notEqual(profile.timezone, 'auto');
+      assert.equal(JSON.parse(fs.readFileSync(profiles.file))[profile.id].fingerprintSeed, profile.fingerprintSeed);
+    }
     assert.notEqual(generated[0].id, generated[1].id);
     assert.notEqual(generated[0].fingerprintSeed, generated[1].fingerprintSeed);
+    if (currentUserAgents(generated[0]).length > 1) assert.notEqual(generated[0].userAgent, generated[1].userAgent);
     if (process.platform === 'win32') {
       assert.notEqual(generated[0].gpuPreset, generated[1].gpuPreset);
       assert.notDeepEqual(generated[0].display, generated[1].display);

@@ -37,6 +37,9 @@ async function mountHardware(root, prefix, profile = {}) {
   const regionLabel = value => value === 'auto' ? AUTOMATIC_REGION : value;
   const displays = options.displays;
   root.innerHTML = `
+    <div class="field"><label for="${prefix}-fingerprint-mode">指纹策略</label><select id="${prefix}-fingerprint-mode" class="input">${creating ? '<option value="random" selected>每次创建随机生成（Chromium）</option>' : ''}<option value="native" ${!creating && !simulated ? 'selected' : ''}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
+    ${creating ? `<p id="${prefix}-random-hint" class="hint">创建时抽取 CPU、内存、可用的 UA 和显卡预设、窗口尺寸与缩放、语言与时区、网页偏好，并生成 Canvas 种子。关闭后重开沿用保存的参数。音频、插件和字体使用原生读数。</p>` : ''}
+    <div id="${prefix}-preferences">
     <div class="field-row">
       <div class="field"><label for="${prefix}-locale">语言</label><select id="${prefix}-locale" class="input">${choices(locales, profile.locale || 'auto', regionLabel)}</select></div>
       <div class="field"><label for="${prefix}-tz">时区</label><select id="${prefix}-tz" class="input">${choices(timezones, profile.timezone || 'auto', regionLabel)}</select></div>
@@ -49,9 +52,7 @@ async function mountHardware(root, prefix, profile = {}) {
       <div class="field"><label for="${prefix}-contrast">网页对比度偏好</label><select id="${prefix}-contrast" class="input">${choices(Object.keys(CONTRAST_PREFERENCES), mediaValue(profile.contrast, 'no-preference'), value => CONTRAST_PREFERENCES[value])}</select></div>
       <div class="field"><label for="${prefix}-forced-colors">网页强制配色</label><select id="${prefix}-forced-colors" class="input">${choices(Object.keys(FORCED_COLORS), mediaValue(profile.forcedColors, 'none'), value => FORCED_COLORS[value])}</select></div>
     </div>
-    <div class="field"><label for="${prefix}-fingerprint-mode">指纹策略</label><select id="${prefix}-fingerprint-mode" class="input">${creating ? '<option value="random" selected>创建时随机分配（Chromium 软件层）</option>' : ''}<option value="native" ${!creating && !simulated ? 'selected' : ''}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
-    <p class="hint">同一环境里的窗口共享一份设置。原生一致模式下，同一台电脑上的不同环境也可能读到相同的 GPU、Canvas、音频和字体。</p>
-    ${creating ? `<p id="${prefix}-random-hint" class="hint">每次创建时保存一组 CPU、适用的显卡标识和 Canvas 种子。${displays ? 'Windows 同时抽取显示预设。' : ''}UA、网页内存、音频、插件和字体采用原生读数。</p>` : ''}
+    </div>
     ${displays ? `<div id="${prefix}-display-fields"><div class="field-row">
       <div class="field"><label for="${prefix}-display-preset">显示测试预设</label><select id="${prefix}-display-preset" class="input" aria-describedby="${prefix}-display-summary">
         <option value="">跟随系统</option>
@@ -95,22 +96,28 @@ async function mountHardware(root, prefix, profile = {}) {
     syncDisplay(profile.display?.scale ?? 100);
   }
   const userAgent = field('user-agent'), gpu = field('hardware-gpu');
+  const viewportField = document.getElementById(`${prefix}-viewport-field`);
   const selectedGpus = { [profile.fingerprintMode]: profile.gpuPreset };
   const selectedUserAgents = { [profile.fingerprintMode]: profile.userAgent || '' };
   const syncMode = () => {
     const mode = field('fingerprint-mode').value;
+    const random = mode === 'random';
     field('hardware-fields').classList.toggle('hidden', mode !== 'hardware' && mode !== 'kernel');
-    if (creating) field('random-hint').classList.toggle('hidden', mode !== 'random');
-    if (displays) field('display-fields').classList.toggle('hidden', mode === 'random');
+    if (creating) field('random-hint').classList.toggle('hidden', !random);
+    if (displays) field('display-fields').classList.toggle('hidden', random);
+    field('preferences').classList.toggle('hidden', random);
+    viewportField?.classList.toggle('hidden', random);
     for (const id of ['software-memory', 'software-noise', 'software-hint']) field(id).classList.toggle('hidden', mode !== 'hardware');
     field('kernel-hint').classList.toggle('hidden', mode !== 'kernel');
     const allowedGpus = mode === 'hardware' ? options.gpus : [{ id: 'native', name: '原生显卡' }];
     gpu.replaceChildren(...allowedGpus.map(({ id, name }) => new Option(name, id)));
     gpu.value = allowedGpus.some(({ id }) => id === selectedGpus[mode]) ? selectedGpus[mode] : 'native';
-    const presets = options.userAgents?.[mode] || [];
+    const selectable = options.selectableUserAgents?.[mode];
+    const presets = (options.userAgents?.[mode] || []).filter(([, value]) =>
+      !selectable || selectable.includes(value) || (mode === profile.fingerprintMode && value === profile.userAgent));
     const current = new Set(options.currentUserAgents?.[mode]);
     userAgent.replaceChildren(new Option('内核原生 UA', ''));
-    for (const [label, matches] of [['当前主版本测试', true], ['历史版本兼容性测试', false]]) {
+    for (const [label, matches] of [['当前主版本测试', true], ['其他版本兼容性测试', false]]) {
       const entries = presets.filter(([, value]) => current.has(value) === matches);
       if (!entries.length) continue;
       const group = document.createElement('optgroup');
@@ -143,6 +150,7 @@ async function mountHardware(root, prefix, profile = {}) {
 function readHardware(root, prefix, fallback = {}) {
   const field = id => root.querySelector('#' + prefix + '-' + id);
   const mode = field('fingerprint-mode')?.value || (['hardware', 'kernel'].includes(fallback.fingerprintMode) ? fallback.fingerprintMode : 'native');
+  if (mode === 'random') return { fingerprintMode: mode };
   const userAgentField = field('user-agent');
   const userAgent = userAgentField ? userAgentField.value || null : fallback.userAgent ?? null;
   const preset = field('display-preset');
@@ -160,7 +168,6 @@ function readHardware(root, prefix, fallback = {}) {
     contrast: readMedia('contrast', 'contrast', 'no-preference'),
     forcedColors: readMedia('forced-colors', 'forcedColors', 'none'),
   };
-  if (mode === 'random') return { ...common, fingerprintMode: 'random' };
   if (mode === 'native') return { ...common, fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
   if (mode === 'kernel') return { ...common, fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
     userAgent, deviceMemory: null, gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset || 'native', canvasNoise: false, audioNoise: false,

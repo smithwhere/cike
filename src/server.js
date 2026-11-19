@@ -156,10 +156,13 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
     const { userAgentPresets, currentUserAgents } = require('./user-agents');
     const { displayCatalog } = require('./display-presets');
     const { LOCALES, TIMEZONES } = require('./localemap');
+    const selectableUserAgents = HOST_PLATFORM === 'win'
+      ? { hardware: userAgentPresets('win', { includeLegacy: false }).hardware.map(([, value]) => value) }
+      : {};
     ctx.body = { ok: true, ...require('./hardware').hardwareOptions(), userAgents: userAgentPresets(HOST_PLATFORM),
       currentUserAgents: Object.fromEntries(['hardware', 'kernel'].map(fingerprintMode =>
         [fingerprintMode, currentUserAgents({ platform: HOST_PLATFORM, fingerprintMode }).map(([, value]) => value)])),
-      displays: displayCatalog(HOST_PLATFORM), locales: LOCALES, timezones: TIMEZONES };
+      selectableUserAgents, displays: displayCatalog(HOST_PLATFORM), locales: LOCALES, timezones: TIMEZONES };
   });
   router.post('/fingerprints/generate', ctx => { ctx.body = { ok: true, fingerprint: require('./hardware').generateHardware() }; });
   router.patch('/browserWindows', ctx => {

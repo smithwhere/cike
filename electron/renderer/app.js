@@ -134,7 +134,7 @@ async function autoCheckNewProxy(manual = false) {
     // Restore selection after refresh
     document.getElementById('n-proxy').value = pid;
     if (res?.status === 'ok') {
-      resultEl.textContent = `✓ ${formatExitIps(res)} · ${res.country || ''} · ${res.timezone || ''}（时区/语言将自动跟随）`;
+      resultEl.textContent = '✓ ' + [formatExitIps(res), res.country, res.timezone].filter(Boolean).join(' · ');
       resultEl.style.color = 'var(--green)';
       return res;
     } else {
@@ -152,25 +152,25 @@ async function autoCheckNewProxy(manual = false) {
 
 async function saveNewProfile(openAfter = false) {
   const proxyId = document.getElementById('n-proxy').value || null;
+  const spec = {
+    group: document.getElementById('n-group').value.trim(),
+    ...readHardware(document, 'n'),
+    proxyId,
+    webrtc: document.getElementById('n-webrtc').value,
+  };
+  if (spec.fingerprintMode !== 'random') {
+    const [width, height] = document.getElementById('n-vp').value.split('x').map(Number);
+    spec.viewport = { width, height };
+  }
 
   // Force proxy check before creating (if a proxy is selected)
   if (proxyId) {
     const checkResult = await autoCheckNewProxy();
     if (!checkResult) {
-      const go = confirm('代理检测失败，指纹参数（时区/语言）无法自动跟随。是否仍要创建？');
+      const go = confirm('代理检测失败。是否仍要创建环境？打开时会重新检测。');
       if (!go) return;
     }
   }
-
-  const [vw, vh] = document.getElementById('n-vp').value.split('x').map(Number);
-  const spec = {
-    group: document.getElementById('n-group').value.trim(),
-    ...readHardware(document, 'n'),
-    viewport: { width: vw, height: vh },
-    proxyId,
-
-    webrtc: document.getElementById('n-webrtc').value,
-  };
 
   try {
     const r = await api('/api/profiles', { method: 'POST', body: JSON.stringify(spec) });

@@ -238,7 +238,7 @@ class BrowserManager {
           const observed = { ...session.network, ...addresses, checkedAt: new Date().toISOString() };
           if (check.save(observed)) session.network = observed;
         };
-      }, graphicsMode);
+      }, graphicsMode, () => this.store.list());
       checkCancelled();
       if (graphicsFallback) this.settings?.rememberCamoufoxSoftware();
       this.store.recordOpened(id, networkCheck.current() ? session.network : null);

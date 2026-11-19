@@ -13,7 +13,7 @@ const { GPU_PRESETS, generateHardware, hardwareConfig, hardwareOptions, isGpuPre
 const { installHardwareContext } = require('../src/hardware-runtime');
 const { hardwareScript } = require('../src/hardware-script');
 const { nativeConfig } = require('../src/nativecore');
-const { userAgentPresets, resolveUserAgent, isUserAgentAllowed } = require('../src/user-agents');
+const { userAgentPresets, currentUserAgents, resolveUserAgent, isUserAgentAllowed } = require('../src/user-agents');
 const { COUNTRY_LOCALE, LOCALES, TIMEZONES } = require('../src/localemap');
 
 test('canvas exports preserve native rejection and bypass processing for wide gamut and large canvases', async () => {
@@ -182,7 +182,7 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
   let index = 0;
   t.mock.method(crypto, 'randomInt', () => index);
 
-  for (const [platform, counts] of [['win', { hardware: 31, kernel: 32 }], ['mac', { hardware: 14, kernel: 17 }]]) {
+  for (const [platform, counts] of [['win', { hardware: 44, kernel: 32 }], ['mac', { hardware: 14, kernel: 17 }]]) {
     const presets = userAgentPresets(platform);
     for (const [fingerprintMode, entries] of Object.entries(presets)) {
       assert.equal(entries.length, counts[fingerprintMode]);
@@ -196,12 +196,18 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
       }
       const compatible = entries.filter(([, ua]) => /(?:Chrome|Firefox)\/158\./.test(ua));
       assert.ok(compatible.length);
+      if (platform === 'win' && fingerprintMode === 'hardware') assert.equal(compatible.length, 6);
       for (index = 0; index < compatible.length; index++) {
         assert.equal(resolveUserAgent({ platform, fingerprintMode }, 'random'), compatible[index][1]);
       }
     }
   }
-  assert.equal(values.size, 94);
+  assert.equal(values.size, 107);
+  const windows = { platform: 'win', fingerprintMode: 'hardware' };
+  const selectable = new Set(userAgentPresets('win', { includeLegacy: false }).hardware.map(([, value]) => value));
+  assert.equal(selectable.size, 30);
+  assert.ok(currentUserAgents(windows).every(([, value]) => selectable.has(value)));
+  assert.ok([...selectable].every(userAgent => isUserAgentAllowed({ ...windows, userAgent })));
   assert.equal(resolveUserAgent({ platform: 'linux', fingerprintMode: 'hardware' }, 'random'), null);
   assert.equal(resolveUserAgent({ platform: 'win', fingerprintMode: 'native' }, 'random'), null);
 });
@@ -232,32 +238,54 @@ test('region and appearance choices survive reopening and feed browser context o
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('two automatic creations persist fresh settings and keep manual creation available', () => {
+test('two automatic creations persist fresh settings and keep manual creation available', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-random-profiles-'));
+  let lastChoice = false;
+  t.mock.method(crypto, 'randomInt', size => lastChoice ? size - 1 : 0);
   try {
     const store = new ProfileStore(dir);
-    const first = store.create({ fingerprintMode: 'random', locale: 'zh-CN' });
+    const first = store.create({ fingerprintMode: 'random' });
+    lastChoice = true;
     const second = store.create({ fingerprintMode: 'random' });
     const reopened = new ProfileStore(dir);
+    const agents = currentUserAgents(first).map(([, value]) => value);
     for (const profile of [first, second]) {
       assert.equal(profile.fingerprintMode, 'hardware');
       assert.equal(profile.canvasNoise, true);
       assert.equal(profile.audioNoise, false);
-      assert.equal(profile.deviceMemory, null);
-      assert.equal(profile.userAgent, null);
-      assert.equal(buildContextOptions(profile).options.extraHTTPHeaders, undefined);
+      assert.ok([4, 8, 16, 32].includes(profile.deviceMemory));
+      assert.ok(agents.length ? agents.includes(profile.userAgent) : profile.userAgent === null);
+      assert.ok(LOCALES.includes(profile.locale));
+      assert.ok(TIMEZONES.includes(profile.timezone));
+      assert.equal(profile.webrtc, 'auto');
+      const { options } = buildContextOptions(profile);
+      assert.equal(options.extraHTTPHeaders, undefined);
+      assert.equal(options.locale, profile.locale);
+      assert.equal(options.timezoneId, profile.timezone);
+      assert.deepEqual(options.viewport, profile.viewport);
+      assert.equal(options.deviceScaleFactor, profile.deviceScaleFactor);
       assert.match(profile.fingerprintSeed, /^[a-f0-9]{32}$/);
       assert.deepEqual(reopened.get(profile.id), profile);
     }
-    assert.equal(first.locale, 'zh-CN');
+    for (const key of ['deviceMemory', 'hardwareConcurrency', 'locale', 'timezone', 'colorScheme', 'reducedMotion', 'contrast', 'forcedColors']) {
+      assert.notEqual(first[key], second[key], key);
+    }
+    if (agents.length > 1) assert.notEqual(first.userAgent, second.userAgent);
     assert.notEqual(first.fingerprintSeed, second.fingerprintSeed);
     if (first.gpuPreset !== 'native') assert.notEqual(first.gpuPreset, second.gpuPreset);
+    assert.notDeepEqual(first.viewport, second.viewport);
     if (HOST_PLATFORM === 'win') {
       assert.notDeepEqual(first.display, second.display);
-      assert.notDeepEqual(buildContextOptions(first).options.viewport, buildContextOptions(second).options.viewport);
     }
-    assert.equal(store.create({}).fingerprintMode, 'native');
-    assert.throws(() => store.update(first.id, { fingerprintMode: 'random' }), { status: 400 });
+    const third = reopened.create({ fingerprintMode: 'random' });
+    if (agents.length > 1) assert.notEqual(second.userAgent, third.userAgent);
+    else assert.equal(third.userAgent, second.userAgent);
+    const customized = reopened.create({ fingerprintMode: 'random', locale: 'zh-CN', colorScheme: 'dark' });
+    assert.equal(customized.locale, 'zh-CN');
+    assert.equal(customized.timezone, 'auto');
+    assert.equal(customized.colorScheme, 'dark');
+    assert.equal(reopened.create({}).fingerprintMode, 'native');
+    assert.throws(() => reopened.update(first.id, { fingerprintMode: 'random' }), { status: 400 });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

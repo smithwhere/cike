@@ -72,12 +72,11 @@
             </div>
           </div>
           <div class="field-row">
-            <div class="field"><label>指纹策略</label><p class="hint">新建环境默认随机分配参数，可在下方更改。</p></div>
-            <div class="field"><label for="n-vp">普通窗口尺寸（跟随系统时）</label><select id="n-vp" class="input"></select></div>
+            <div class="field hidden" id="n-viewport-field"><label for="n-vp">普通窗口尺寸（跟随系统时）</label><select id="n-vp" class="input"></select></div>
           </div>
         </div>
         <div class="card">
-          <h2>代理 <span class="sub">（选择后自动检测，指纹参数自动跟随）</span></h2>
+          <h2>代理 <span class="sub">（选择后自动检测）</span></h2>
           <div class="field"><label>代理</label>
             <div style="display:flex;gap:8px">
               <select id="n-proxy" class="input" style="flex:1"></select>
@@ -89,7 +88,7 @@
         <div class="card">
           <h2>指纹选项</h2>
           <div id="n-hardware"></div>
-          <div class="field"><label>WebRTC</label><select id="n-webrtc" class="input"><option value="auto">自动（限制直连 UDP）</option><option value="restricted">限制直连 UDP（可能影响通话）</option><option value="default">默认（绑定代理时仍限制 UDP）</option></select></div>
+          <div class="field"><label for="n-webrtc">WebRTC 网络策略</label><select id="n-webrtc" class="input"><option value="auto">自动（限制直连 UDP）</option><option value="restricted">限制直连 UDP（可能影响通话）</option><option value="default">默认（绑定代理时仍限制 UDP）</option></select></div>
         </div>
         <div class="row" style="margin-top:4px">
           <button id="n-save" class="btn">创建环境</button>

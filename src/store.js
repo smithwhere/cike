@@ -6,7 +6,8 @@ const { HOST_PLATFORM, validateProfile } = require('./fingerprint');
 const { privateDirectory, readJSON, writeJSON, credentials } = require('./privatefiles');
 const { validateInlineProxy } = require('./proxyconfig');
 const { GPU_PRESETS, completeHardware, generateHardware, isGpuPresetAllowed } = require('./hardware');
-const { randomDisplay } = require('./display-presets');
+const { randomWindowOptions } = require('./display-presets');
+const { REGION_PRESETS } = require('./localemap');
 const { resolveUserAgent } = require('./user-agents');
 
 const DEFAULT_SPEC = {
@@ -19,6 +20,29 @@ const DEFAULT_SPEC = {
   gpuPreset: 'native', audioNoise: false, fingerprintSeed: null,
 };
 const pick = value => Object.fromEntries(Object.keys(DEFAULT_SPEC).filter(k => Object.hasOwn(value, k)).map(k => [k, value[k]]));
+
+function generateRandomProfile(spec, previous) {
+  const choose = values => values[crypto.randomInt(values.length)];
+  const window = randomWindowOptions(HOST_PLATFORM, previous?.display);
+  const region = {};
+  if (spec.locale === undefined && spec.timezone === undefined) {
+    const [locale, timezone] = choose(REGION_PRESETS);
+    Object.assign(region, { locale, timezone });
+  }
+  return {
+    ...window,
+    ...region,
+    colorScheme: choose(['light', 'dark']),
+    reducedMotion: choose(['no-preference', 'reduce']),
+    contrast: choose(['no-preference', 'more']),
+    forcedColors: choose(['none', 'active']),
+    ...spec,
+    ...generateHardware(process.platform, process.arch, previous?.gpuPreset),
+    userAgent: 'random',
+    display: window.display,
+  };
+}
+
 class ProfileStore {
   constructor(dataDir, secretStorage) {
     this.dataDir = dataDir;
@@ -54,18 +78,16 @@ class ProfileStore {
     writeJSON(this.file, records);
   }
   create(spec = {}) {
-    if (spec.fingerprintMode === 'random') {
-      const previous = Object.values(this.profiles).at(-1);
-      spec = { ...spec, ...generateHardware(process.platform, process.arch, previous?.gpuPreset),
-        userAgent: null, deviceMemory: null, display: randomDisplay(HOST_PLATFORM, previous?.display) };
-    }
+    const random = spec.fingerprintMode === 'random';
+    const previous = random ? Object.values(this.profiles).at(-1) : null;
+    if (random) spec = generateRandomProfile(spec, previous);
     const id = 'p_' + crypto.randomBytes(6).toString('hex');
     const now = new Date().toISOString();
     const sequence = this.sequence + 1;
     const record = completeHardware({ ...structuredClone(DEFAULT_SPEC), ...pick(spec), id,
       name: String(spec.name || '').trim() || String(sequence), sequence,
       viewport: { ...DEFAULT_SPEC.viewport, ...spec.viewport }, createdAt: now, updatedAt: now }, spec);
-    record.userAgent = resolveUserAgent(record, record.userAgent);
+    record.userAgent = resolveUserAgent(record, record.userAgent, previous?.userAgent);
     validateProfile(record);
     if (record.proxy) validateInlineProxy(record.proxy);
     this.sequence = sequence;
