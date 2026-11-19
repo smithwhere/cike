@@ -5,6 +5,10 @@ text('name', config.name); text('number', '#' + config.sequence);
 document.title = `#${config.sequence} ${config.name} · 环境检测`;
 text('route', config.proxy ? '代理连接' : '系统网络');
 text('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone); text('language', navigator.language);
+function canonicalTimezone(timeZone) {
+  try { return new Intl.DateTimeFormat('en', { timeZone }).resolvedOptions().timeZone; }
+  catch { return timeZone; }
+}
 async function getJSON(url) {
   const response = await fetch(url, { cache: 'no-store', credentials: 'omit', signal: AbortSignal.timeout(12000) });
   if (!response.ok) throw new Error('检测服务暂时不可用');
@@ -26,7 +30,9 @@ async function detect() {
       if (geo.success === false || geo.ip !== ip) throw new Error('地区未知');
       text('region', [geo.country, geo.region, geo.city].filter(Boolean).join(' · '));
       text('exit-timezone', geo.timezone?.id); text('isp', geo.connection?.isp);
-      if (geo.timezone?.id && geo.timezone.id !== Intl.DateTimeFormat().resolvedOptions().timeZone) text('match', '浏览器时区与出口地区时区不同，请检查环境时区设置。地区数据库可能存在误差。');
+      if (geo.timezone?.id && canonicalTimezone(geo.timezone.id) !== canonicalTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)) {
+        text('match', '浏览器时区与出口地区时区不同，请检查环境时区设置。地区数据库可能存在误差。');
+      }
     } catch { for (const id of ['region', 'exit-timezone', 'isp']) text(id, '地区服务暂不可用'); }
   } catch { text('ip', '检测失败'); text('status', '请检查网络或代理后重新检测；不会切换为直连。'); }
   finally { button.disabled = false; }
@@ -53,16 +59,21 @@ function supportedCodecs() {
   const media = document.createElement('video');
   const formats = [
     ['H.264', 'video/mp4; codecs="avc1.42E01E"'],
+    ['HEVC', 'video/mp4; codecs="hvc1.1.6.L93.B0"'],
+    ['VP8', 'video/webm; codecs="vp8"'],
     ['VP9', 'video/webm; codecs="vp9"'],
     ['AV1', 'video/mp4; codecs="av01.0.04M.08"'],
     ['AAC', 'audio/mp4; codecs="mp4a.40.2"'],
+    ['MP3', 'audio/mpeg'],
+    ['FLAC', 'audio/flac'],
     ['Opus', 'audio/webm; codecs="opus"'],
   ];
   return formats.filter(([, type]) => media.canPlayType(type)).map(([name]) => name).join('、') || '未报告样本格式';
 }
 
 async function readFonts() {
-  const samples = ['Arial', 'Calibri', 'Segoe UI', 'Microsoft YaHei', 'Helvetica Neue', 'PingFang SC', 'Noto Sans'];
+  const samples = ['Arial', 'Calibri', 'Segoe UI', 'Segoe UI Variable', 'Microsoft YaHei', 'Yu Gothic', 'Malgun Gothic',
+    'Helvetica Neue', 'PingFang SC', 'Noto Sans'];
   const names = await Promise.all(samples.map(async name => {
     try {
       await new FontFace('cike-font-sample', `local("${name}")`).load();

@@ -35,8 +35,11 @@ const GPU_PRESETS = {
   'nvidia-rtx-4050-laptop': gpuPreset('NVIDIA GeForce RTX 4050 Laptop GPU', 'NVIDIA', 'nvidia'),
   'nvidia-rtx-4060-laptop': gpuPreset('NVIDIA GeForce RTX 4060 Laptop GPU', 'NVIDIA', 'nvidia'),
   'nvidia-rtx-4070-laptop': gpuPreset('NVIDIA GeForce RTX 4070 Laptop GPU', 'NVIDIA', 'nvidia'),
+  'nvidia-rtx-5050-laptop': gpuPreset('NVIDIA GeForce RTX 5050 Laptop GPU', 'NVIDIA', 'nvidia'),
   'nvidia-rtx-5060-laptop': gpuPreset('NVIDIA GeForce RTX 5060 Laptop GPU', 'NVIDIA', 'nvidia'),
+  'nvidia-rtx-5070-laptop': gpuPreset('NVIDIA GeForce RTX 5070 Laptop GPU', 'NVIDIA', 'nvidia'),
   'amd-radeon-graphics': gpuPreset('AMD Radeon Graphics', 'AMD', 'amd'),
+  'amd-radeon-780m': gpuPreset('AMD Radeon 780M Graphics', 'AMD', 'amd'),
   'amd-rx-580': gpuPreset('AMD Radeon RX 580', 'AMD', 'amd'),
   'amd-rx-6600': gpuPreset('AMD Radeon RX 6600', 'AMD', 'amd'),
   'amd-rx-6700-xt': gpuPreset('AMD Radeon RX 6700 XT', 'AMD', 'amd'),
@@ -50,7 +53,7 @@ const GPU_PRESETS = {
   'apple-m4': gpuPreset('Apple M4', 'Apple', 'apple'),
   'apple-m4-pro': gpuPreset('Apple M4 Pro', 'Apple', 'apple'),
 };
-const RANDOM_CPU_VALUES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32];
+const RANDOM_CPU_VALUES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 32];
 const CPU_VALUES = [2, ...RANDOM_CPU_VALUES];
 const MEMORY_VALUES = [0.5, 1, 2, 4, 8, 16, 32, 48, 64, 96];
 const RANDOM_MEMORY_VALUES = [4, 8];

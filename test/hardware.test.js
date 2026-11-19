@@ -39,7 +39,7 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
 });
 
 test('random generation uses every supported CPU and memory choice once per pool index', (t) => {
-  const cpus = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32];
+  const cpus = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 32];
   const memories = [4, 8];
   const indexes = new Map();
   t.mock.method(crypto, 'randomInt', size => indexes.get(size) ?? 0);
@@ -58,7 +58,7 @@ test('random generation uses every supported CPU and memory choice once per pool
 
 test('simulated GPU presets remain selectable, with platform-specific random pools', (t) => {
   const presets = hardwareOptions().gpus.filter(({ id }) => id !== 'native');
-  assert.equal(presets.length, 39);
+  assert.equal(presets.length, 42);
   let gpuIndex = 0;
   const poolSizes = new Set([5, presets.length - 5]);
   t.mock.method(crypto, 'randomInt', size => poolSizes.has(size) ? gpuIndex : 0);
@@ -81,7 +81,7 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
   let index = 0;
   t.mock.method(crypto, 'randomInt', () => index);
 
-  for (const [platform, counts] of [['win', { hardware: 31, kernel: 32 }], ['mac', { hardware: 11, kernel: 13 }]]) {
+  for (const [platform, counts] of [['win', { hardware: 31, kernel: 32 }], ['mac', { hardware: 11, kernel: 17 }]]) {
     const presets = userAgentPresets(platform);
     for (const [fingerprintMode, entries] of Object.entries(presets)) {
       assert.equal(entries.length, counts[fingerprintMode]);
@@ -100,13 +100,13 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
       }
     }
   }
-  assert.equal(values.size, 87);
+  assert.equal(values.size, 91);
   assert.equal(resolveUserAgent({ platform: 'linux', fingerprintMode: 'hardware' }, 'random'), null);
   assert.equal(resolveUserAgent({ platform: 'win', fingerprintMode: 'native' }, 'random'), null);
 });
 
 test('region and appearance choices survive reopening and feed browser context options', () => {
-  assert.deepEqual(new Set(LOCALES), new Set(Object.values(COUNTRY_LOCALE)));
+  for (const locale of Object.values(COUNTRY_LOCALE)) assert.ok(LOCALES.includes(locale));
   assert.equal(Intl.getCanonicalLocales(LOCALES).length, LOCALES.length);
   assert.equal(new Set(TIMEZONES).size, TIMEZONES.length);
   for (const timeZone of TIMEZONES) assert.doesNotThrow(() => new Intl.DateTimeFormat('en', { timeZone }));

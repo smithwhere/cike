@@ -93,11 +93,12 @@ test('default page detects through browser fetch, refreshes and reports failures
     const p=store.create({name:'<fixture>',locale:'en-US',timezone:'UTC',colorScheme:'dark',reducedMotion:'reduce'});await manager.open(p.id,{headless:true});
     const context=manager.getContext(p.id);let failed=false,calls=0,reported;
     await context.route('https://api.ipify.org/**',route=>{calls++;return failed?route.abort():route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8'})});});
-    await context.route('https://ipwho.is/**',route=>route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8',country:'Fixture',timezone:{id:'UTC'},connection:{isp:'Test ISP'}})}));
+    await context.route('https://ipwho.is/**',route=>route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8',country:'Fixture',timezone:{id:'Etc/UTC'},connection:{isp:'Test ISP'}})}));
     const page=await openStartPage(context,p,{route:'proxy',exitIp:'192.0.2.8'},ip=>reported=ip);
     await page.waitForFunction(()=>document.querySelector('#refresh').disabled===false);
     assert.equal(await page.locator('#name').innerText(),'<fixture>');assert.equal(await page.locator('#ip').innerText(),'192.0.2.8');assert.equal(reported,'192.0.2.8');
     assert.equal(await page.locator('#isp').innerText(),'Test ISP');
+    assert.equal(await page.locator('#match').textContent(),'');
     await page.locator('#browser-values summary').click();
     await page.waitForFunction(() => document.getElementById('readout-ua').textContent === navigator.userAgent);
     assert.equal(await page.locator('#readout-display').innerText(), await page.evaluate(() => `${screen.width}×${screen.height} / ${innerWidth}×${innerHeight} / ${devicePixelRatio}`));

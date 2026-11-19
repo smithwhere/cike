@@ -17,6 +17,8 @@ const PRESETS = [
   { id: 'hd-plus', name: 'HD+', width: 1600, height: 900 },
   { id: 'wsxga-plus', name: 'WSXGA+', width: 1680, height: 1050 },
   { id: 'uwfhd', name: '超宽 FHD', width: 2560, height: 1080 },
+  { id: 'uwqhd-plus', name: '超宽 QHD+', width: 3840, height: 1600, specs: '37.5 英寸曲面 · IPS Black' },
+  { id: 'wquxga', name: '4K+ 笔记本', width: 3840, height: 2400, specs: '16 英寸 · IPS / OLED · 60 Hz · DCI-P3' },
 ];
 const SCALES = [100, 125, 150, 175, 200];
 
