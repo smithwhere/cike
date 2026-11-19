@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: windows-release-${{ inputs.tag }}
+  group: windows-release
   cancel-in-progress: false
 
 env:
@@ -42,8 +42,9 @@ jobs:
             const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
             const tag = process.env.RELEASE_TAG;
             if (!/^\d+$/.test(process.env.SOURCE_RUN)) throw new Error('Invalid build run ID');
-            if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) || tag !== `v${version}`) {
-              throw new Error('Use vMAJOR.MINOR.PATCH to match the application version');
+            const releaseTag = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.0$/;
+            if (!releaseTag.test(tag) || tag !== `v${version}`) {
+              throw new Error('Use vMAJOR.MINOR.0 to match the application version');
             }
             const { data: run } = await github.rest.actions.getWorkflowRun({
               ...context.repo, run_id: Number(process.env.SOURCE_RUN),
@@ -58,6 +59,24 @@ jobs:
               const { data: existing } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag });
               if (!existing.draft) throw new Error('This release is already published');
             } catch (error) { if (error.status !== 404) throw error; }
+            const releases = await github.paginate(github.rest.repos.listReleases, { ...context.repo, per_page: 100 });
+            // Start the three-part Windows release sequence at v0.11.0.
+            let major = 0;
+            let minor = 10;
+            for (const release of releases) {
+              const match = releaseTag.exec(release.tag_name);
+              if (!match || release.draft || release.prerelease) continue;
+              const filename = `CIKE-${release.tag_name.slice(1)}-windows-x64.zip`;
+              if (!release.assets.some(asset => asset.name === filename && asset.state === 'uploaded' && asset.size > 0)) continue;
+              const publishedMajor = Number(match[1]);
+              const publishedMinor = Number(match[2]);
+              if (publishedMajor > major || (publishedMajor === major && publishedMinor > minor)) {
+                major = publishedMajor;
+                minor = publishedMinor;
+              }
+            }
+            const nextTag = `v${major}.${minor + 1}.0`;
+            if (tag !== nextTag) throw new Error(`The next Windows release tag must be ${nextTag}`);
             core.setOutput('sha', run.head_sha);
             core.setOutput('filename', `CIKE-${version}-windows-x64.zip`);
             core.setOutput('build_url', run.html_url);
