@@ -7,7 +7,7 @@ Windows 版源自 [engeeeee/cike](https://github.com/engeeeee/cike) 对 [chainfi
 ## 使用
 
 1. 使用 Windows 10 1803 或更新版本、Windows 11 的 Intel/AMD 64 位系统。
-2. 将 `CIKE-0.10.3-windows-x64.zip` 完整解压到本地可写目录，例如 `D:\Apps\CIKE`。
+2. 将下载的 Windows x64 ZIP 完整解压到本地可写目录，例如 `D:\Apps\CIKE`。
 3. 双击 `CIKE.exe`。运行时已随包提供，无需另装 Node.js。请保留同目录的 DLL、资源目录等文件。
 4. 在“设置”中下载 Chromium 内核，然后创建并打开环境。首次下载需要联网。
 
