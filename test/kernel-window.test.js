@@ -8,8 +8,8 @@ const http = require('http');
 const nativeCore = require('../src/nativecore');
 const { startBackend } = require('../src/server');
 const { ownedBrowser } = require('../src/browser-lifecycle');
-async function until(read, predicate) {
-  const deadline = Date.now() + 16000;
+async function until(read, predicate, timeout = 16000) {
+  const deadline = Date.now() + timeout;
   do { const value = await read(); if (predicate(value)) return value; await new Promise(resolve => setTimeout(resolve, 100)); } while (Date.now() < deadline);
   throw new Error('Native window state did not settle');
 }
@@ -18,10 +18,10 @@ async function nativeMaximized(context) {
   assert.ok(Number.isSafeInteger(pid) && pid > 0);
   // Firefox may keep a launcher process and put its UI in a child. Inspect
   // windows from this process tree only, without depending on window titles.
-  const script = `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class CikeWindowProbe { [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool IsZoomed(IntPtr hWnd); }'; $cikeIds=@(${pid}); $cikeProcesses=Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId; do { $cikeNext=@($cikeProcesses | Where-Object { $_.ParentProcessId -in $cikeIds -and $_.ProcessId -notin $cikeIds } | ForEach-Object { [int]$_.ProcessId }); $cikeIds+=$cikeNext } while ($cikeNext.Count); $cikeMax=@(Get-Process -Id $cikeIds -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -and [CikeWindowProbe]::IsZoomed($_.MainWindowHandle) }); [Console]::Write($cikeMax.Count -gt 0)`;
+  const script = `$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class CikeWindowProbe { [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool IsZoomed(IntPtr hWnd); }'; $cikeIds=@(${pid}); $cikeProcesses=Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId; do { $cikeNext=@($cikeProcesses | Where-Object { $_.ParentProcessId -in $cikeIds -and $_.ProcessId -notin $cikeIds } | ForEach-Object { [int]$_.ProcessId }); $cikeIds+=$cikeNext } while ($cikeNext.Count); $cikeMax=@(Get-Process -Id $cikeIds -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -and [CikeWindowProbe]::IsZoomed($_.MainWindowHandle) }); [Console]::Write($cikeMax.Count -gt 0)`;
   const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const { stdout } = await require('util').promisify(require('child_process').execFile)(powershell,
-    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { timeout: 10000 });
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { timeout: 30000 });
   return stdout.trim() === 'True';
 }
 test('Camoufox native windows maximize and inherit a manual native fullscreen change into popups, environments and restart',
@@ -61,10 +61,13 @@ test('Camoufox native windows maximize and inherit a manual native fullscreen ch
       await manager.open(a.id); const context = manager.getContext(a.id), page = context.pages()[0];
       // Server 2022 reports a 24px outer-frame difference when maximized.
       // Check the real OS window state rather than inferring it from web APIs.
-      try { await until(() => nativeMaximized(context), Boolean); }
+      try { await until(() => nativeMaximized(context), Boolean, 40000); }
       catch (error) {
         const bounds = await page.evaluate(() => ({ width: outerWidth, height: outerHeight, available: [screen.availWidth, screen.availHeight], screen: [screen.width, screen.height], dpr: devicePixelRatio }));
-        throw new Error(error.message + ': ' + JSON.stringify({ bounds, warning: manager.windowWarning(a.id), mode: backend.settings.get().browserWindowState }));
+        throw new Error('Native maximization probe failed: ' + JSON.stringify({
+          bounds, warning: manager.windowWarning(a.id), mode: backend.settings.get().browserWindowState,
+          reason: error.killed ? 'PowerShell timed out' : error.stderr?.trim() || error.message,
+        }));
       }
       fullscreen = true;
       await until(() => backend.settings.get().browserWindowState, state => state === 'fullscreen');

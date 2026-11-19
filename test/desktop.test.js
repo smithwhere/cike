@@ -286,18 +286,19 @@ test('closing a desktop with an unresponsive browser exits and can reopen the sa
       app = await launch(); let page = await app.firstWindow();
       let card = page.locator('.env-card').filter({ hasText: 'Shutdown fixture' });
       await card.locator('[data-act="open"]').click(); await card.getByText('运行中', { exact: true }).waitFor({ timeout: 40000 });
-      await app.evaluate(({ app }) => {
+      const started = Date.now(), exited = app.waitForEvent('close', { timeout: 18000 });
+      const closingPid = app.evaluate(({ app }) => new Promise(resolve => {
         const requireApp = process.getBuiltinModule('module').createRequire(app.getAppPath() + '/package.json');
         requireApp('./src/browser').BrowserManager.prototype.closeAll = function () {
           const context = this.contexts.values().next().value;
-          globalThis.cikeShutdownBrowserPid = requireApp('./src/browser-lifecycle').ownedBrowser(context).process.pid;
+          resolve(requireApp('./src/browser-lifecycle').ownedBrowser(context)?.process?.pid ?? null);
           return new Promise(() => {});
         };
-      });
-      const started = Date.now(), exited = app.waitForEvent('close', { timeout: 18000 });
-      await app.evaluate(({ app }) => app.quit());
-      const browserPid = await app.evaluate(() => globalThis.cikeShutdownBrowserPid);
-      assert.ok(browserPid > 0); await exited; app = null;
+        app.quit();
+      }));
+      const [browserPid] = await Promise.all([closingPid, exited]);
+      app = null;
+      assert.ok(browserPid > 0);
       assert.ok(Date.now() - started < 16000);
       assert.throws(() => process.kill(browserPid, 0), error => error.code === 'ESRCH');
       app = await launch(); page = await app.firstWindow();
