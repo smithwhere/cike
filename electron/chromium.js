@@ -9,6 +9,7 @@ const { pipeline } = require('stream/promises');
 const exec = promisify(execFile);
 const { privateDirectory, writePrivate } = require('../src/privatefiles');
 const { extractBrowserZip } = require('../src/zip');
+const { renameKernel } = require('../src/native-storage');
 const CHROMIUM_VERSION = require('../src/chromium-version');
 const inProgress = new Map();
 const verifiedVersions = new Map();
@@ -97,6 +98,7 @@ async function install(dir, onProgress) {
   privateDirectory(browserRoot(dir));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-chromium-'));
   const staging = fs.mkdtempSync(path.join(browserRoot(dir), '.install-'));
+  let installError;
   try {
     const zip = path.join(tmp, 'chromium.zip');
     await downloadFile(downloadUrl(), zip, onProgress);
@@ -112,12 +114,21 @@ async function install(dir, onProgress) {
     // kernels remain available until the new version is fully verified.
     const destination = path.join(browserRoot(dir), `${CHROMIUM_VERSION}-${path.basename(staging).slice(9)}`);
     const relative = path.relative(staging, executable);
-    fs.renameSync(staging, destination);
+    await renameKernel(staging, destination);
     const final = path.join(destination, relative);
     writePrivate(executableMarker(dir), final + '\n');
     onProgress?.({ done: 1, total: 1, pct: 100 });
     return final;
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(staging, { recursive: true, force: true }); }
+  } catch (error) {
+    installError = error;
+    throw error;
+  } finally {
+    const options = { recursive: true, force: true, maxRetries: 6, retryDelay: 250 };
+    const cleanup = await Promise.allSettled([fs.promises.rm(tmp, options), fs.promises.rm(staging, options)]);
+    const failure = cleanup.find(result => result.status === 'rejected');
+    if (failure && !installError) throw failure.reason;
+    if (failure) console.error('[CIKE] Chromium cleanup:', failure.reason.code);
+  }
 }
 async function downloadChromium(dir, onProgress) {
   if (inProgress.has(dir)) return inProgress.get(dir);

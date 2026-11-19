@@ -38,7 +38,7 @@ async function digest(filename) {
 }
 function report(callback, value) { try { callback?.(value); } catch { /* A closed settings window cannot interrupt a file transaction. */ } }
 async function renameKernel(from, to) {
-  // Windows/antivirus can retain handles briefly after Firefox has exited.
+  // Windows/antivirus can retain handles briefly after the browser has exited.
   // Retry only transient sharing/access errors; never replace an existing copy.
   for (let attempt = 0; ; attempt++) {
     try { await fs.promises.rename(from, to); return; }
