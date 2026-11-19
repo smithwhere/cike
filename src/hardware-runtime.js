@@ -34,7 +34,10 @@ function patchProtocol(prototype) {
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'Worker hardware configuration failed');
       return response;
     }).catch(error => {
-      record.failed(error);
+      // Closing a tab can dispose its worker while these commands are pending.
+      // Playwright marks that session closed before rejecting its callbacks.
+      if (error?.type === 'closed' && this._closed) record.targets.delete(this._sessionId);
+      else record.failed(error);
       throw error;
     });
   };

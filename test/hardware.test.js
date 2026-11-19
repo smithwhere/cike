@@ -2,12 +2,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ProfileStore } = require('../src/store');
 const { HOST_PLATFORM, buildContextOptions } = require('../src/fingerprint');
 const { generateHardware, hardwareConfig, hardwareOptions } = require('../src/hardware');
+const { installHardwareContext } = require('../src/hardware-runtime');
 const { nativeConfig } = require('../src/nativecore');
 const { userAgentPresets, resolveUserAgent, isUserAgentAllowed } = require('../src/user-agents');
 const { COUNTRY_LOCALE, LOCALES, TIMEZONES } = require('../src/localemap');
@@ -36,6 +38,42 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
     assert.ok(hardwareOptions().cpus.includes(generated.hardwareConcurrency));
     assert.equal(store.create(generated).fingerprintSeed, generated.fingerprintSeed);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('worker startup rejects genuine errors and preserves the environment for disposed workers', async (t) => {
+  class Session extends EventEmitter {
+    constructor(connection, id) {
+      super();
+      this._connection = connection;
+      this._sessionId = id;
+    }
+    createChildSession(id) { return new Session(this._connection, id); }
+    async send(method) {
+      if (method === 'Runtime.enable') throw this.failure;
+      return {};
+    }
+  }
+
+  const connection = { _sessions: new Map() };
+  const root = connection.rootSession = new Session(connection, '');
+  connection._sessions.set('', root);
+  const context = new EventEmitter();
+  context._connection = { toImpl: () => ({ _browser: { _connection: connection } }) };
+  context.addInitScript = async () => {};
+  context.pages = () => [];
+  let closes = 0;
+  context.close = async () => { closes++; context.emit('close'); };
+  t.mock.method(console, 'error', () => {});
+  await installHardwareContext(context, generateHardware());
+
+  for (const [id, closed, type, expectedCloses] of [['closed', true, 'closed', 0], ['active', false, 'error', 1]]) {
+    root.emit('Target.attachedToTarget', { sessionId: id, targetInfo: { type: 'worker' } });
+    const worker = root.createChildSession(id);
+    worker._closed = closed;
+    worker.failure = Object.assign(new Error(id), { type });
+    await assert.rejects(worker.send('Runtime.runIfWaitingForDebugger'), error => error === worker.failure);
+    assert.equal(closes, expectedCloses);
+  }
 });
 
 test('random generation uses every supported CPU and memory choice once per pool index', (t) => {
