@@ -48,6 +48,16 @@ function prepareStartupPreferences(directory, preferences) {
 async function launchNative({ dataDir, directory, profile, proxy, headless, downloadsDirectory, bridge, display, graphicsMode = 'hardware', onContext = () => {} }) {
   const recovery = prepareProfile(directory);
   const config = nativeConfig(profile);
+  if (display) {
+    // Firefox's viewport override sets DPR and content size. Camoufox reads
+    // the virtual display dimensions from its native screen configuration.
+    const { width, height } = display.screen;
+    Object.assign(config, {
+      'screen.width': width, 'screen.height': height,
+      'screen.availWidth': width, 'screen.availHeight': height,
+      'screen.availLeft': 0, 'screen.availTop': 0,
+    });
+  }
   if (bridge) config.addons = [windowExtension(directory, bridge)];
   const preferences = {
     ...graphicsPreferences(graphicsMode),
