@@ -66,8 +66,12 @@ class ProfileStore {
     }
     this.sequenceFile = path.join(dataDir, 'profile-sequence.json');
     const saved = readJSON(this.sequenceFile, { last: 0 }).last || 0;
-    this.sequence = Math.max(saved, this.list().length, ...this.list().map(p => Number(p.sequence) || (/^\d+$/.test(p.name) ? Number(p.name) : 0)));
-    for (const p of this.list()) {
+    const profiles = this.list();
+    // The saved counter can outlive the last profile, including on older installations.
+    this.sequence = profiles.length
+      ? Math.max(saved, profiles.length, ...profiles.map(p => Number(p.sequence) || (/^\d+$/.test(p.name) ? Number(p.name) : 0)))
+      : 0;
+    for (const p of profiles) {
       if (!Number.isSafeInteger(p.sequence) || p.sequence < 1) this.profiles[p.id].sequence = ++this.sequence;
     }
     if (fs.existsSync(this.file)) this._save();
@@ -90,10 +94,14 @@ class ProfileStore {
     record.userAgent = resolveUserAgent(record, record.userAgent, previous?.userAgent);
     validateProfile(record);
     if (record.proxy) validateInlineProxy(record.proxy);
-    this.sequence = sequence;
     writeJSON(this.sequenceFile, { last: sequence });
+    this.sequence = sequence;
     this.profiles[id] = record;
-    try { this._save(); } catch (error) { delete this.profiles[id]; throw error; }
+    try { this._save(); } catch (error) {
+      delete this.profiles[id];
+      if (Object.keys(this.profiles).length === 0) this.sequence = 0;
+      throw error;
+    }
     return structuredClone(record);
   }
   list() { return Object.values(this.profiles).map(p => structuredClone(p)).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.sequence || 0) - (b.sequence || 0)); }
@@ -184,6 +192,7 @@ class ProfileStore {
     }
     delete this.profiles[id];
     try { this._save(); } catch (error) { this.profiles[id] = rec; throw error; }
+    if (Object.keys(this.profiles).length === 0) this.sequence = 0;
     return true;
   }
   profileDir(id) {

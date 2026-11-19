@@ -14,6 +14,66 @@ const { syntheticSamples } = require('../src/synthetic-samples');
 const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cike-environments-'));
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
+test('environment numbering continues until the last environment is removed', () => {
+  const dir = temp();
+  try {
+    const store = new ProfileStore(dir);
+    const first = store.create();
+    const second = store.create();
+    assert.equal(store.remove(second.id), true);
+    const third = store.create();
+    assert.equal(third.sequence, 3);
+    assert.equal(store.remove(third.id), true);
+
+    const reloaded = new ProfileStore(dir);
+    const fourth = reloaded.create();
+    assert.equal(fourth.sequence, 4);
+    assert.equal(reloaded.remove(first.id), true);
+    assert.equal(reloaded.remove(fourth.id), true);
+
+    const next = reloaded.create();
+    assert.equal(next.sequence, 1);
+    assert.equal(next.name, '1');
+    assert.equal(new ProfileStore(dir).create().sequence, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('an empty environment list restarts numbering despite an old saved counter', () => {
+  const dir = temp();
+  try {
+    fs.writeFileSync(path.join(dir, 'profiles.json'), '{}');
+    fs.writeFileSync(path.join(dir, 'profile-sequence.json'), '{"last":10}');
+
+    const store = new ProfileStore(dir);
+    const first = store.create();
+    assert.equal(first.sequence, 1);
+    assert.equal(first.name, '1');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('retrying a failed first environment save still assigns number one', t => {
+  const dir = temp();
+  try {
+    const store = new ProfileStore(dir);
+    const rename = fs.renameSync;
+    const failure = t.mock.method(fs, 'renameSync', (source, destination) => {
+      if (destination === store.file) throw new Error('fixture profile save failed');
+      return rename(source, destination);
+    });
+    assert.throws(() => store.create(), /fixture profile save failed/);
+    failure.mock.restore();
+
+    assert.deepEqual(store.list(), []);
+    assert.equal(store.create().sequence, 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('whole proxy lines support credentials, encoded URLs and IPv6 without silently accepting incomplete fields', () => {
   assert.deepEqual(parseProxyLine('proxy.example:1080:user:p:a:ss'), { type:'http',host:'proxy.example',port:1080,username:'user',password:'p:a:ss',remark:'proxy.example:1080' });
   const p = parseProxyLine('socks5://u%40x:p%3Ass@[::1]:1080 {Test}');
