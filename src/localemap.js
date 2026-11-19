@@ -62,4 +62,6 @@ function localeForCountry(countryCode) {
   return COUNTRY_LOCALE[countryCode.toUpperCase()] || null;
 }
 
-module.exports = { localeForCountry, COUNTRY_LOCALE, LOCALES, TIMEZONES, REGION_PRESETS };
+const isAutomaticTimezone = value => value === 'auto' || value === 'ip';
+
+module.exports = { localeForCountry, COUNTRY_LOCALE, LOCALES, TIMEZONES, REGION_PRESETS, isAutomaticTimezone };

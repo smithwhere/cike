@@ -292,7 +292,7 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       const agents = currentUserAgents(profile);
       assert.ok(agents.length ? agents.some(([, value]) => value === profile.userAgent) : profile.userAgent === null);
       assert.notEqual(profile.locale, 'auto');
-      assert.notEqual(profile.timezone, 'auto');
+      assert.equal(profile.timezone, 'ip');
       assert.equal(JSON.parse(fs.readFileSync(profiles.file))[profile.id].fingerprintSeed, profile.fingerprintSeed);
     }
     assert.notEqual(generated[0].id, generated[1].id);

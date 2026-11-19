@@ -105,4 +105,18 @@ async function checkProxy(proxy, settings, preparedRoute, transport) {
     return { status: 'failed', ...exitAddresses({}), country: null, countryCode: null, timezone: null, error: error.message };
   } finally { await ownedTransport?.forwarder?.stop(); }
 }
-module.exports = { checkProxy, prepareProxyRoute, openProxyTransport, readProxyNetwork, exitAddresses, curl };
+
+async function checkDirectNetwork(request = fetch) {
+  const response = await request('https://ipwho.is/?fields=success,ip,timezone.id', {
+    signal: AbortSignal.timeout(5000), cache: 'no-store', credentials: 'omit', redirect: 'error',
+  });
+  if (!response.ok) throw new Error('公网出口时区查询失败');
+  const result = await response.json();
+  const addresses = exitAddresses({ exitIp: result?.ip });
+  const timezone = result?.timezone?.id;
+  if (result?.success !== true || !addresses.exitIp || typeof timezone !== 'string') throw new Error('公网出口时区查询响应无效');
+  new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
+  return { ...addresses, timezone };
+}
+
+module.exports = { checkProxy, checkDirectNetwork, prepareProxyRoute, openProxyTransport, readProxyNetwork, exitAddresses, curl };

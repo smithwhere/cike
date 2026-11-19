@@ -8,7 +8,8 @@ const { chromium } = require('playwright');
 const { buildContextOptions, webrtcArgs, validateProfile } = require('./fingerprint');
 const { resolveProxy } = require('./proxyconfig');
 const { ProxyStore } = require('./proxystore');
-const { checkProxy, prepareProxyRoute, openProxyTransport, exitAddresses } = require('./proxycheck');
+const { checkProxy, checkDirectNetwork, prepareProxyRoute, openProxyTransport, exitAddresses } = require('./proxycheck');
+const { localeForCountry, isAutomaticTimezone } = require('./localemap');
 const { chromiumBrowsingSwitches } = require('./chromium-browsing');
 const { privateDirectory } = require('./privatefiles');
 const { prepareDownloads, configureDownloads } = require('./downloads');
@@ -36,6 +37,7 @@ class BrowserManager {
     this.settings = settings;
     this.downloadsDirectory = options.downloadsDirectory;
     this.checkProxy = options.checkProxy || checkProxy;
+    this.checkDirectNetwork = options.checkDirectNetwork || checkDirectNetwork;
     this.resolveChromium = options.resolveChromium;
     this.getDisplayWorkArea = options.getDisplayWorkArea;
     this.sessions = new Map();
@@ -99,7 +101,7 @@ class BrowserManager {
     checkRoute();
     const effective = { ...profile };
     let network = { route: proxyRecord ? 'proxy' : 'system', ...exitAddresses({}) };
-    let forwarder, context, windowToken, windowBridge, windowControl, graphicsMode, graphicsFallback = false;
+    let forwarder, context, windowToken, windowBridge, windowControl, graphicsMode, timezoneWarning, graphicsFallback = false;
     const trackContext = launched => {
       this.contexts.set(id, launched);
       const process = ownedBrowser(launched)?.process;
@@ -116,17 +118,26 @@ class BrowserManager {
         checkRoute();
         savedProxy?.save(result);
         if (result.status !== 'ok') throw Object.assign(new Error(result.error || '代理连接失败，已阻止启动'), { status: 502 });
-        if (profile.timezone === 'auto') {
+        if (isAutomaticTimezone(profile.timezone)) {
           if (!result.timezone) throw Object.assign(new Error('代理出口时区未知，请重新检测或手动选择时区；不会回退到本机时区'), { status: 409 });
           effective.timezone = result.timezone;
         }
         if (profile.locale === 'auto') {
-          const { localeForCountry } = require('./localemap');
           if (!result.countryCode) throw Object.assign(new Error('代理出口地区未知，请重新检测或手动选择语言'), { status: 409 });
           effective.locale = localeForCountry(result.countryCode);
           if (!effective.locale) throw Object.assign(new Error('没有此代理地区的语言映射，请手动选择语言'), { status: 409 });
         }
         network = { route: 'proxy', ...exitAddresses(result), checkedAt: new Date().toISOString(), timezone: effective.timezone, locale: effective.locale };
+      } else if (profile.timezone === 'ip') {
+        const result = await this.checkDirectNetwork().catch(() => null);
+        checkRoute();
+        if (result) {
+          effective.timezone = result.timezone;
+          network = { route: 'system', ...exitAddresses(result), checkedAt: new Date().toISOString(), timezone: effective.timezone };
+        } else {
+          effective.timezone = 'auto';
+          timezoneWarning = '公网出口时区查询失败，本次使用系统时区';
+        }
       }
       const proxy = ProxyStore.toPlaywright(transport.proxy);
       if (proxy) proxy.bypass = '<-loopback>';
@@ -255,6 +266,7 @@ class BrowserManager {
       this.store.recordOpened(id, networkCheck.current() ? session.network : null);
       const warning = [
         effective.display?.scale !== profile.display?.scale ? `本次显示缩放已自动调整为 ${effective.display.scale}%` : null,
+        timezoneWarning,
         graphicsFallback ? '检测到 GPU/D3D11 启动失败，已自动使用兼容绘制' : null,
         this.windowWarning(id),
       ].filter(Boolean).join('；');

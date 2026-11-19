@@ -26,12 +26,12 @@ function generateRandomProfile(spec, previous, workArea) {
   const window = randomWindowOptions(HOST_PLATFORM, previous?.display, workArea);
   const region = {};
   if (spec.locale === undefined && spec.timezone === undefined) {
-    const [locale, timezone] = choose(REGION_PRESETS);
-    Object.assign(region, { locale, timezone });
+    [region.locale] = choose(REGION_PRESETS);
   }
   return {
     ...window,
     ...region,
+    timezone: 'ip',
     colorScheme: choose(['light', 'dark']),
     reducedMotion: choose(['no-preference', 'reduce']),
     contrast: choose(['no-preference', 'more']),

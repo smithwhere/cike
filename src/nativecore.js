@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { CPU_VALUES, isGpuPresetAllowed } = require('./hardware');
+const { isAutomaticTimezone } = require('./localemap');
 
 // Pin both the browser and its automation driver. No floating "latest" binary.
 const RELEASE = 'v158.0.1-beta.41';
@@ -39,7 +40,7 @@ function nativeConfig(profile) {
   if (profile.userAgent) config['navigator.userAgent'] = profile.userAgent;
   const locale = profile.locale === 'auto' ? Intl.DateTimeFormat().resolvedOptions().locale : profile.locale;
   config['locale:all'] = [...new Set([locale, locale.split('-')[0]])].join(', ');
-  if (profile.timezone !== 'auto') config.timezone = profile.timezone;
+  if (!isAutomaticTimezone(profile.timezone)) config.timezone = profile.timezone;
   return config;
 }
 function nativeEnvironment(config, preferences) {

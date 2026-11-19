@@ -1,6 +1,7 @@
 'use strict';
 const { isUserAgentAllowed } = require('./user-agents');
 const { emulatedDisplay } = require('./display-presets');
+const { isAutomaticTimezone } = require('./localemap');
 // Native mode preserves Chromium values. Hardware mode is explicit software
 // emulation and must be installed in pages and workers before site scripts.
 const HOST_PLATFORM = { darwin: 'mac', win32: 'win', linux: 'linux' }[process.platform] || 'linux';
@@ -15,7 +16,7 @@ function validateProfile(profile) {
   if (profile.fingerprintMode === 'hardware') require('./hardware').validateHardware(profile);
   if (profile.fingerprintMode === 'kernel') require('./nativecore').validateKernel(profile);
   if (!['auto', 'default', 'restricted'].includes(profile.webrtc)) bad('WebRTC 请选择自动、默认或限制直连 UDP');
-  if (profile.timezone !== 'auto') {
+  if (!isAutomaticTimezone(profile.timezone)) {
     try { new Intl.DateTimeFormat('en', { timeZone: profile.timezone }).format(); } catch { bad('无效的 IANA 时区'); }
   }
   if (profile.locale !== 'auto') {
@@ -45,7 +46,7 @@ function buildContextOptions(profile) {
     ...display,
   };
   if (profile.locale !== 'auto') options.locale = profile.locale;
-  if (profile.timezone !== 'auto') options.timezoneId = profile.timezone;
+  if (!isAutomaticTimezone(profile.timezone)) options.timezoneId = profile.timezone;
   if (profile.proxy) options.proxy = profile.proxy;
   return { options, display };
 }

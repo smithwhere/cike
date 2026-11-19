@@ -15,6 +15,43 @@ const { BrowserManager } = require('../src/browser');
 const listen = s => new Promise(r => s.listen(0, '127.0.0.1', r));
 const close = s => new Promise(r => { s.closeAllConnections?.(); s.close(r); });
 
+test('IP timezone follows the selected exit and keeps the configured mode across launches', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-ip-timezone-'));
+  const store = new ProfileStore(directory);
+  let directChecks = 0;
+  const manager = new BrowserManager(store, null, null, {
+    startPage: false,
+    checkDirectNetwork: async () => {
+      if (++directChecks > 1) throw new Error('fixture offline');
+      return { exitIp: '192.0.2.10', timezone: 'Europe/Prague' };
+    },
+    checkProxy: async () => ({ status: 'ok', exitIp: '192.0.2.20', timezone: 'America/New_York' }),
+  });
+  const zone = id => manager.getContext(id).pages()[0].evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  try {
+    const direct = store.create({ fingerprintMode: 'random' });
+    assert.equal(direct.timezone, 'ip');
+    await manager.open(direct.id, { headless: true });
+    assert.equal(await zone(direct.id), 'Europe/Prague');
+    assert.equal(new ProfileStore(directory).get(direct.id).timezone, 'ip');
+    await manager.close(direct.id);
+
+    const proxied = store.create({ fingerprintMode: 'random', proxy: { server: 'http://127.0.0.1:9' } });
+    await manager.open(proxied.id, { headless: true });
+    assert.equal(await zone(proxied.id), 'America/New_York');
+    assert.equal(directChecks, 1);
+    await manager.close(proxied.id);
+
+    const offline = await manager.open(direct.id, { headless: true });
+    assert.match(offline.warning, /系统时区/);
+    assert.equal(store.get(direct.id).timezone, 'ip');
+    const explicit = store.create({ timezone: 'Asia/Tokyo' });
+    await manager.open(explicit.id, { headless: true });
+    assert.equal(await zone(explicit.id), 'Asia/Tokyo');
+    assert.equal(directChecks, 2);
+  } finally { await manager.closeAll(); fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('SOCKS HTTP forwarding preserves cookies, content type, status and chunked bodies, with remote DNS', async () => {
   const target = http.createServer(async (req, res) => {
     let body = ''; for await (const chunk of req) body += chunk;

@@ -267,18 +267,18 @@ test('two automatic creations persist fresh settings and keep manual creation av
       assert.ok([4, 8, 16, 32].includes(profile.deviceMemory));
       assert.ok(agents.length ? agents.includes(profile.userAgent) : profile.userAgent === null);
       assert.ok(LOCALES.includes(profile.locale));
-      assert.ok(TIMEZONES.includes(profile.timezone));
+      assert.equal(profile.timezone, 'ip');
       assert.equal(profile.webrtc, 'auto');
       const { options } = buildContextOptions(profile);
       assert.equal(options.extraHTTPHeaders, undefined);
       assert.equal(options.locale, profile.locale);
-      assert.equal(options.timezoneId, profile.timezone);
+      assert.equal(options.timezoneId, undefined);
       assert.deepEqual(options.viewport, profile.viewport);
       assert.equal(options.deviceScaleFactor, profile.deviceScaleFactor);
       assert.match(profile.fingerprintSeed, /^[a-f0-9]{32}$/);
       assert.deepEqual(reopened.get(profile.id), profile);
     }
-    for (const key of ['deviceMemory', 'hardwareConcurrency', 'locale', 'timezone', 'colorScheme', 'reducedMotion', 'contrast', 'forcedColors']) {
+    for (const key of ['deviceMemory', 'hardwareConcurrency', 'locale', 'colorScheme', 'reducedMotion', 'contrast', 'forcedColors']) {
       assert.notEqual(first[key], second[key], key);
     }
     if (agents.length > 1) assert.notEqual(first.userAgent, second.userAgent);
@@ -293,7 +293,7 @@ test('two automatic creations persist fresh settings and keep manual creation av
     else assert.equal(third.userAgent, second.userAgent);
     const customized = reopened.create({ fingerprintMode: 'random', locale: 'zh-CN', colorScheme: 'dark' });
     assert.equal(customized.locale, 'zh-CN');
-    assert.equal(customized.timezone, 'auto');
+    assert.equal(customized.timezone, 'ip');
     assert.equal(customized.colorScheme, 'dark');
     assert.equal(reopened.create({}).fingerprintMode, 'native');
     assert.throws(() => reopened.update(first.id, { fingerprintMode: 'random' }), { status: 400 });

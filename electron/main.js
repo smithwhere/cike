@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { startBackend, DATA_DIR } = require('../src/server');
+const { checkDirectNetwork } = require('../src/proxycheck');
 const { chromiumStatus, downloadChromium, resolveManagedChromium } = require('./chromium');
 const { checkUpdate, installUpdate } = require('./updater');
 const { nativeStatus, downloadNative, verifyNativeExecutable } = require('./nativecore');
@@ -80,6 +81,7 @@ app.whenReady().then(async () => {
         decrypt: value => { requireSafeStorage(); return safeStorage.decryptString(Buffer.from(value, 'base64')); },
       },
       resolveSystemProxy: url => session.defaultSession.resolveProxy(url), downloadsDirectory: app.getPath('downloads'),
+      checkDirectNetwork: () => checkDirectNetwork((url, options) => session.defaultSession.fetch(url, options)),
       resolveChromium: () => resolveManagedChromium(DATA_DIR),
       getDisplayWorkArea: process.platform === 'win32' ? () => {
         const active = mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized();
