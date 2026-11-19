@@ -86,7 +86,7 @@ function need(obj, fields) {
 function buildBackend(dataDir = DATA_DIR, options = {}) {
   ensureDataDir(dataDir);
   const token = getToken(dataDir);
-  const store = new ProfileStore(dataDir, options.secretStorage);
+  const store = new ProfileStore(dataDir, options.secretStorage, options.getDisplayWorkArea);
   const proxyStore = new ProxyStore(dataDir, options.secretStorage);
   const settings = new Settings(dataDir, options.resolveSystemProxy);
   const browsers = new BrowserManager(store, proxyStore, settings, options);

@@ -4,7 +4,7 @@
  * Main process starts the local backend (Koa API + profile/browser manager)
  * and hosts the management UI, which talks to the same Local API over HTTP.
  */
-const { app, BrowserWindow, ipcMain, shell, session, safeStorage, dialog, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, safeStorage, dialog, clipboard, screen } = require('electron');
 const { pathToFileURL } = require('url');
 const path = require('path');
 const fs = require('fs');
@@ -81,6 +81,10 @@ app.whenReady().then(async () => {
       },
       resolveSystemProxy: url => session.defaultSession.resolveProxy(url), downloadsDirectory: app.getPath('downloads'),
       resolveChromium: () => resolveManagedChromium(DATA_DIR),
+      getDisplayWorkArea: process.platform === 'win32' ? () => {
+        const active = mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized();
+        return (active ? screen.getDisplayMatching(mainWindow.getBounds()) : screen.getPrimaryDisplay()).workArea;
+      } : undefined,
     });
   } catch (err) {
     console.error('[CIKE] backend failed to start:', err.message);

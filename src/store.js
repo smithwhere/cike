@@ -21,9 +21,9 @@ const DEFAULT_SPEC = {
 };
 const pick = value => Object.fromEntries(Object.keys(DEFAULT_SPEC).filter(k => Object.hasOwn(value, k)).map(k => [k, value[k]]));
 
-function generateRandomProfile(spec, previous) {
+function generateRandomProfile(spec, previous, workArea) {
   const choose = values => values[crypto.randomInt(values.length)];
-  const window = randomWindowOptions(HOST_PLATFORM, previous?.display);
+  const window = randomWindowOptions(HOST_PLATFORM, previous?.display, workArea);
   const region = {};
   if (spec.locale === undefined && spec.timezone === undefined) {
     const [locale, timezone] = choose(REGION_PRESETS);
@@ -44,10 +44,11 @@ function generateRandomProfile(spec, previous) {
 }
 
 class ProfileStore {
-  constructor(dataDir, secretStorage) {
+  constructor(dataDir, secretStorage, getDisplayWorkArea) {
     this.dataDir = dataDir;
     this.file = path.join(dataDir, 'profiles.json');
     this.codec = credentials(secretStorage);
+    this.getDisplayWorkArea = getDisplayWorkArea;
     this.networkChecks = new Map();
     privateDirectory(dataDir);
     privateDirectory(path.join(dataDir, 'profiles'));
@@ -84,7 +85,7 @@ class ProfileStore {
   create(spec = {}) {
     const random = spec.fingerprintMode === 'random';
     const previous = random ? Object.values(this.profiles).at(-1) : null;
-    if (random) spec = generateRandomProfile(spec, previous);
+    if (random) spec = generateRandomProfile(spec, previous, this.getDisplayWorkArea?.());
     const id = 'p_' + crypto.randomBytes(6).toString('hex');
     const now = new Date().toISOString();
     const sequence = this.sequence + 1;

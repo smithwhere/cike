@@ -10,7 +10,7 @@ const { defaultDataDirectory, curlRuntime } = require('../src/platform');
 const { extractBrowserZip } = require('../src/zip');
 const { cftPlatform, downloadUrl, findExecutable, browserVersion, downloadChromium, executableMarker } = require('../electron/chromium');
 const CHROMIUM_VERSION = require('../src/chromium-version');
-const { displayCatalog, emulatedDisplay } = require('../src/display-presets');
+const { displayCatalog, emulatedDisplay, randomWindowOptions } = require('../src/display-presets');
 const { ProfileStore } = require('../src/store');
 
 test('Windows display presets produce CSS sizes and DPR without changing the native default', () => {
@@ -43,6 +43,48 @@ test('Windows display presets produce CSS sizes and DPR without changing the nat
     assert.throws(() => emulatedDisplay(choice, 'win'), { status: 400 });
   }
   assert.throws(() => emulatedDisplay({ preset: 'fhd', scale: 125 }, 'mac'), { status: 400 });
+});
+
+test('random Windows displays fit the work area with room for the browser frame', t => {
+  let choice = 0;
+  t.mock.method(require('node:crypto'), 'randomInt', size => Math.min(choice, size - 1));
+  const desktop = { width: 1920, height: 1040 };
+  const first = randomWindowOptions('win', null, desktop);
+  assert.deepEqual(first.display, { preset: 'hd', scale: 100 });
+  choice = 100;
+  const second = randomWindowOptions('win', first.display, desktop);
+  assert.deepEqual(second.display, { preset: 'fhd', scale: 125 });
+  assert.deepEqual(second.viewport, { width: 1536, height: 864 });
+
+  const small = { width: 1366, height: 728 };
+  const compact = randomWindowOptions('win', null, small);
+  const alternative = randomWindowOptions('win', compact.display, small);
+  assert.notDeepEqual(compact.display, alternative.display);
+  for (const option of [compact, alternative]) {
+    assert.ok(option.display);
+    assert.ok(option.viewport.width <= 1334);
+    assert.ok(option.viewport.height <= 568);
+  }
+  assert.equal(randomWindowOptions('win', null, { width: 340, height: 440 }).display, null);
+});
+
+test('random creations recheck the current work area while manual presets stay selectable', { skip: process.platform !== 'win32' }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-random-display-store-'));
+  try {
+    let workArea = { width: 1920, height: 1040 };
+    const store = new ProfileStore(root, undefined, () => workArea);
+    const first = store.create({ fingerprintMode: 'random' });
+    assert.ok(first.viewport.height <= 880);
+    workArea = { width: 1280, height: 680 };
+    const second = store.create({ fingerprintMode: 'random' });
+    assert.ok(second.display);
+    assert.ok(second.viewport.width <= 1248);
+    assert.ok(second.viewport.height <= 520);
+
+    const manual = { preset: 'uhd', scale: 100 };
+    assert.deepEqual(store.create({ display: manual }).display, manual);
+    assert.deepEqual(new ProfileStore(root).get(first.id).display, first.display);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('a saved display preset survives reopening and can be cleared to follow the system', { skip: process.platform !== 'win32' }, () => {

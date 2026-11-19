@@ -26,6 +26,10 @@ const PRESETS = [
 ];
 const SCALES = [100, 125, 150, 175, 200, 225, 250, 300];
 const MIN_CSS_SIZE = 320;
+// Headed persistent Chromium adds 16 × 134 DIP to its viewport. Keep a little
+// extra space for Windows borders and positioning inside the work area.
+const WINDOW_FRAME = { width: 32, height: 160 };
+const WINDOW_OFFSET = 8;
 const RANDOM_DISPLAYS = [
   { preset: 'hd', scale: 100 }, { preset: 'fhd', scale: 100 }, { preset: 'fhd', scale: 125 },
   { preset: 'qhd', scale: 100 }, { preset: 'qhd', scale: 125 }, { preset: 'wqxga', scale: 125 },
@@ -50,8 +54,34 @@ function displayOptions(preset, scale) {
   return { screen, viewport: { ...screen }, deviceScaleFactor };
 }
 
-function randomWindowOptions(platform, previous) {
-  const choices = RANDOM_DISPLAYS.filter(({ preset, scale }) => preset !== previous?.preset || scale !== previous?.scale);
+function fitsWindowsWindow(viewport, workArea) {
+  return viewport.width + WINDOW_FRAME.width <= workArea.width && viewport.height + WINDOW_FRAME.height <= workArea.height;
+}
+
+function fittedWindowsWindowPosition(viewport, workArea) {
+  if (!workArea || !fitsWindowsWindow(viewport, workArea)) return null;
+  return { x: workArea.x + WINDOW_OFFSET, y: workArea.y + WINDOW_OFFSET };
+}
+
+function randomWindowOptions(platform, previous, workArea) {
+  let pool = RANDOM_DISPLAYS;
+  if (platform === 'win' && workArea) {
+    const fits = choice => fitsWindowsWindow(emulatedDisplay(choice, 'win').viewport, workArea);
+    pool = pool.filter(fits);
+    // Compact work areas may need higher scaling or smaller catalogue presets.
+    if (pool.length < 2) {
+      pool = PRESETS.flatMap(preset => availableScales(preset).map(scale => ({ preset: preset.id, scale }))).filter(fits);
+    }
+    if (!pool.length) {
+      return { display: null, deviceScaleFactor: 1, viewport: {
+        width: Math.max(MIN_CSS_SIZE, Math.min(1280, workArea.width - WINDOW_FRAME.width)),
+        height: Math.max(MIN_CSS_SIZE, Math.min(720, workArea.height - WINDOW_FRAME.height)),
+      } };
+    }
+  }
+  const choices = pool.length > 1
+    ? pool.filter(({ preset, scale }) => preset !== previous?.preset || scale !== previous?.scale)
+    : pool;
   const display = choices[crypto.randomInt(choices.length)];
   const preset = PRESETS.find(option => option.id === display.preset);
   const { viewport, deviceScaleFactor } = displayOptions(preset, display.scale);
@@ -67,4 +97,4 @@ function emulatedDisplay(display, platform) {
   return displayOptions(preset, display.scale);
 }
 
-module.exports = { displayCatalog, emulatedDisplay, randomWindowOptions };
+module.exports = { displayCatalog, emulatedDisplay, randomWindowOptions, fittedWindowsWindowPosition };

@@ -13,6 +13,7 @@ const { chromiumBrowsingSwitches } = require('./chromium-browsing');
 const { privateDirectory } = require('./privatefiles');
 const { prepareDownloads, configureDownloads } = require('./downloads');
 const { WindowStateManager } = require('./windowstate');
+const { fittedWindowsWindowPosition } = require('./display-presets');
 const { launchWithGraphics } = require('./native-graphics');
 const { within, stopContext, forceStopContext, ownedBrowser } = require('./browser-lifecycle');
 
@@ -36,6 +37,7 @@ class BrowserManager {
     this.downloadsDirectory = options.downloadsDirectory;
     this.checkProxy = options.checkProxy || checkProxy;
     this.resolveChromium = options.resolveChromium;
+    this.getDisplayWorkArea = options.getDisplayWorkArea;
     this.sessions = new Map();
     this.opening = new Map();
     this.closing = new Map();
@@ -152,6 +154,10 @@ class BrowserManager {
         delete launchOptions.deviceScaleFactor;
         launchOptions.args.push(state === 'fullscreen' ? '--start-fullscreen' : state === 'maximized'
           ? '--start-maximized' : `--window-size=${profile.viewport.width},${profile.viewport.height}`);
+      }
+      if (display && !kernel && !headless && process.platform === 'win32' && !profile.lastOpenedAt) {
+        const position = fittedWindowsWindowPosition(display.viewport, this.getDisplayWorkArea?.());
+        if (position) launchOptions.args.push(`--window-position=${position.x},${position.y}`);
       }
       // Deliberately no arbitrary LFB_EXTRA_ARGS: they could disable sandbox,
       // alter proxy routing or invalidate the native consistency contract.
