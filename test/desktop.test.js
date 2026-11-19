@@ -47,7 +47,16 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.deepEqual(preferences, { sandbox: true, contextIsolation: true, nodeIntegration: false });
     const content = fs.readFileSync(path.join(dir, 'proxies.json'), 'utf8');
     if (secret) { assert.ok(!content.includes(secret)); assert.ok(content.includes('safe-storage-v1')); }
+    const optionsURL = '**/api/fingerprints/options';
+    await page.route(optionsURL, route => route.abort());
     await page.getByRole('button', { name: '编辑', exact: true }).click();
+    await page.locator('.modal-body .advanced summary').click();
+    const retryOptions = page.locator('#f-hardware').getByRole('button', { name: '重新加载' });
+    await retryOptions.waitFor();
+    assert.equal(await page.locator('#m-save').isDisabled(), true);
+    await page.unroute(optionsURL);
+    await retryOptions.click();
+    await page.locator('#f-fingerprint-mode').waitFor({ state: 'attached' });
     await page.locator('#f-convert').check(); await page.locator('#m-save').click();
     await page.getByText('原生一致', { exact: true }).waitFor();
     assert.equal(JSON.parse(fs.readFileSync(profiles.file))[p.id].fingerprintMode, 'native');

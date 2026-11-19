@@ -6,7 +6,12 @@ const ORIGIN = 'https://start.cike.invalid';
 async function openStartPage(context, profile, network, onResult) {
   const page = context.pages()[0] || await context.newPage();
   const root = path.join(__dirname, '..', 'electron', 'start');
-  const config = { name: profile.name, sequence: profile.sequence, proxy: network.route === 'proxy', expectedIp: network.exitIp };
+  const software = profile.fingerprintMode === 'hardware';
+  const config = {
+    name: profile.name, sequence: profile.sequence, proxy: network.route === 'proxy', expectedIp: network.exitIp,
+    mode: profile.fingerprintMode, canvasProcessing: software && profile.canvasNoise === true,
+    audioProcessing: software && profile.audioNoise === true,
+  };
   const assets = { '/': ['index.html', 'text/html'], '/start.js': ['start.js', 'text/javascript'], '/start.css': ['start.css', 'text/css'] };
   // A reserved .invalid origin is fulfilled only inside this page. No local
   // API token, proxy password, listening port or browser-wide JS binding.

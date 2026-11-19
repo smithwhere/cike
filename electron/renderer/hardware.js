@@ -6,8 +6,27 @@ const CONTRAST_PREFERENCES = { 'no-preference': '无偏好', more: '更高对比
 const FORCED_COLORS = { none: '关闭', active: '启用强制配色', system: '跟随系统' };
 const mediaValue = (value, defaultValue) => value === null ? 'system' : value ?? defaultValue;
 let hardwareOptionsPromise;
+function loadHardwareForm(root, prefix, profile, saveButtons) {
+  const load = async () => {
+    for (const button of saveButtons) button.disabled = true;
+    root.innerHTML = '<p class="hint" role="status">正在加载指纹选项…</p>';
+    try {
+      await mountHardware(root, prefix, profile);
+      if (root.isConnected) for (const button of saveButtons) button.disabled = false;
+    } catch {
+      if (!root.isConnected) return;
+      root.innerHTML = '<p class="hint" role="status">指纹选项加载失败，请重试后保存。</p><button type="button" class="btn small">重新加载</button>';
+      root.querySelector('button').onclick = load;
+    }
+  };
+  void load();
+}
+
 async function mountHardware(root, prefix, profile = {}) {
-  if (!hardwareOptionsPromise) hardwareOptionsPromise = api('/api/fingerprints/options');
+  hardwareOptionsPromise ??= api('/api/fingerprints/options').catch(error => {
+    hardwareOptionsPromise = undefined;
+    throw error;
+  });
   const options = await hardwareOptionsPromise;
   if (!root.isConnected) return;
   const kernel = profile.fingerprintMode === 'kernel', hardware = profile.fingerprintMode === 'hardware', simulated = kernel || hardware;
@@ -30,6 +49,7 @@ async function mountHardware(root, prefix, profile = {}) {
       <div class="field"><label for="${prefix}-forced-colors">网页强制配色</label><select id="${prefix}-forced-colors" class="input">${choices(Object.keys(FORCED_COLORS), mediaValue(profile.forcedColors, 'none'), value => FORCED_COLORS[value])}</select></div>
     </div>
     <div class="field"><label>指纹策略</label><select id="${prefix}-fingerprint-mode" class="input"><option value="native" ${simulated ? '' : 'selected'}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
+    <p class="hint">同一环境里的窗口共享一份设置。原生一致模式下，同一台电脑上的不同环境也可能读到相同的 GPU、Canvas、音频和字体。</p>
     ${displays ? `<div class="field-row">
       <div class="field"><label for="${prefix}-display-preset">显示测试预设</label><select id="${prefix}-display-preset" class="input" aria-describedby="${prefix}-display-summary">
         <option value="">跟随系统</option>
@@ -88,12 +108,11 @@ async function mountHardware(root, prefix, profile = {}) {
   field('fingerprint-mode').onchange = syncMode;
   syncMode();
   field('hardware-generate').onclick = async event => {
+    const mode = field('fingerprint-mode').value;
     event.target.disabled = true;
     try {
       const { fingerprint } = await api('/api/fingerprints/generate', { method: 'POST', body: '{}' });
-      if (!root.isConnected) return;
-      const mode = field('fingerprint-mode').value === 'hardware' ? 'hardware' : 'kernel';
-      field('fingerprint-mode').value = mode; syncMode();
+      if (!root.isConnected || field('fingerprint-mode').value !== mode) return;
       field('hardware-cpu').value = fingerprint.hardwareConcurrency;
       field('hardware-memory').value = fingerprint.deviceMemory;
       field('hardware-gpu').value = mode === 'kernel' ? 'native' : fingerprint.gpuPreset;

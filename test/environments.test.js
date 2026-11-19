@@ -103,9 +103,15 @@ test('default page detects through browser fetch, refreshes and reports failures
     await page.waitForFunction(() => document.getElementById('readout-ua').textContent === navigator.userAgent);
     assert.equal(await page.locator('#readout-display').innerText(), await page.evaluate(() => `${screen.width}×${screen.height} / ${innerWidth}×${innerHeight} / ${devicePixelRatio}`));
     assert.equal(await page.locator('#readout-languages').innerText(), await page.evaluate(() => navigator.languages.join('、')));
+    assert.equal(await page.locator('#readout-mode').innerText(), '原生一致 · Canvas 原生输出 · 音频 原生输出');
+    assert.match(await page.locator('#readout-rects').innerText(), /\d+\.\d×\d+\.\d CSS px/);
+    assert.equal(await page.locator('#readout-plugins').innerText(), await page.evaluate(() => Array.from(navigator.plugins, plugin => plugin.name).join('、') || '浏览器未报告插件'));
     assert.match(await page.locator('#readout-appearance').innerText(), /减少动画 \/ 启用 \/ .*对比度/);
     await page.waitForFunction(() => document.getElementById('readout-location').textContent !== '检测中…');
     await page.waitForFunction(() => document.getElementById('readout-fonts').textContent !== '检测中…');
+    await page.waitForFunction(() => document.getElementById('readout-canvas').textContent !== '检测中…' && document.getElementById('readout-audio').textContent !== '检测中…');
+    assert.match(await page.locator('#readout-canvas').innerText(), /^[a-f0-9]{16}$/);
+    assert.match(await page.locator('#readout-audio').innerText(), /^44100 Hz · [a-f0-9]{16}$/);
     assert.equal(calls,1);
     failed=true;await page.locator('#refresh').click();await page.waitForFunction(()=>document.querySelector('#refresh').disabled===false);
     assert.equal(await page.locator('#ip').innerText(),'检测失败');assert.equal(calls,2);

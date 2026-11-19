@@ -55,8 +55,9 @@ test('hardware simulation agrees at first script execution across pages, frames 
   const origin = `http://127.0.0.1:${server.address().port}`;
   const store = new ProfileStore(dir), manager = new BrowserManager(store, null, null, { startPage: false, downloadsDirectory: path.join(dir, 'Downloads') });
   try {
-    const a = store.create({ fingerprintMode: 'hardware', hardwareConcurrency: 4, deviceMemory: 4, gpuPreset: 'intel-uhd-630', fingerprintSeed: '1234567890abcdef1234567890abcdef', locale: 'en-US', timezone: 'UTC' });
-    const b = store.create({ fingerprintMode: 'hardware', hardwareConcurrency: 16, deviceMemory: 8, gpuPreset: 'nvidia-rtx-3060', fingerprintSeed: 'fedcba0987654321fedcba0987654321' });
+    const a = store.create({ fingerprintMode: 'hardware', hardwareConcurrency: 4, deviceMemory: 4, gpuPreset: 'intel-uhd-630', locale: 'en-US', timezone: 'UTC' });
+    const b = store.create({ fingerprintMode: 'hardware', hardwareConcurrency: 16, deviceMemory: 8, gpuPreset: 'nvidia-rtx-3060' });
+    assert.notEqual(a.fingerprintSeed, b.fingerprintSeed);
     await manager.open(a.id, { headless: true });
     const context = manager.getContext(a.id), page = await context.newPage(); await page.goto(origin);
     const main = await page.evaluate(observe);
@@ -89,6 +90,11 @@ test('hardware simulation agrees at first script execution across pages, frames 
     assert.deepEqual(service, main);
     const audio = await page.evaluate(audioValues);
     assert.deepEqual(audio.first, audio.second); assert.deepEqual(audio.first, audio.copied);
+    const secondPage = await context.newPage();
+    await secondPage.goto(origin);
+    assert.equal((await secondPage.evaluate(observe)).canvas, main.canvas);
+    assert.deepEqual((await secondPage.evaluate(audioValues)).first, audio.first);
+    await secondPage.close();
     const htmlCanvas = await page.evaluate(async () => {
       const hash = data => { let value = 2166136261; for (const n of data) value = Math.imul(value ^ n, 16777619); return value >>> 0; };
       const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;

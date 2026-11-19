@@ -43,6 +43,8 @@ detect();
 const valuesPanel = document.getElementById('browser-values');
 function refreshDisplay() {
   text('readout-display', `${screen.width}×${screen.height} / ${innerWidth}×${innerHeight} / ${devicePixelRatio}`);
+  const { width, height } = document.querySelector('.hero').getBoundingClientRect();
+  text('readout-rects', `${width.toFixed(1)}×${height.toFixed(1)} CSS px`);
 }
 
 function graphicsReadout() {
@@ -53,6 +55,35 @@ function graphicsReadout() {
   const renderer = gl ? gl.getParameter(extension?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) : null;
   const webgl = renderer ? `${webgl2 ? 'WebGL 2' : 'WebGL'} · ${renderer}` : 'WebGL 不可用';
   return `${webgl} / WebGPU ${navigator.gpu ? '接口可用' : '接口不可用'}`;
+}
+
+async function sampleDigest(data) {
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest, 0, 8), value => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function readCanvas() {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 32;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#78b4c8';
+    context.fillRect(0, 0, 32, 32);
+    const digest = await sampleDigest(context.getImageData(0, 0, 32, 32).data);
+    text('readout-canvas', digest);
+  } catch { text('readout-canvas', '样本不可用'); }
+}
+
+async function readAudio() {
+  try {
+    const context = new OfflineAudioContext(1, 4096, 44100);
+    const oscillator = context.createOscillator();
+    oscillator.connect(context.destination);
+    oscillator.start();
+    const buffer = await context.startRendering();
+    const digest = await sampleDigest(buffer.getChannelData(0));
+    text('readout-audio', `${buffer.sampleRate} Hz · ${digest}`);
+  } catch { text('readout-audio', '样本不可用'); }
 }
 
 function supportedCodecs() {
@@ -104,11 +135,17 @@ valuesPanel.addEventListener('toggle', () => {
     : matchMedia('(prefers-contrast: less)').matches ? '更低对比度'
       : matchMedia('(prefers-contrast: custom)').matches ? '自定义对比度' : '默认对比度';
   text('readout-appearance', `${mode} / ${motion} / ${colors} / ${contrast}`);
+  const policy = { native: '原生一致', kernel: '内核模拟', hardware: '硬件模拟（软件层）' }[config.mode] || '未知';
+  const processing = enabled => enabled ? '固定处理' : '原生输出';
+  text('readout-mode', `${policy} · Canvas ${processing(config.canvasProcessing)} · 音频 ${processing(config.audioProcessing)}`);
   text('readout-graphics', graphicsReadout());
+  text('readout-plugins', Array.from(navigator.plugins ?? [], plugin => plugin.name).join('、') || '浏览器未报告插件');
   text('readout-codecs', supportedCodecs());
   const connection = navigator.connection;
   text('readout-network', connection ? `${connection.effectiveType} · ${connection.downlink} Mbps · ${connection.rtt} ms` : '接口不可用');
   void readFonts();
   void readLocationPermission();
+  void readCanvas();
+  void readAudio();
 });
 window.addEventListener('resize', () => { if (valuesPanel.open) refreshDisplay(); });

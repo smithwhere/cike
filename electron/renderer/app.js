@@ -76,7 +76,8 @@ function initNewPage() {
   refreshNewProxySelect();
   if (newPageInited) return;
   newPageInited = true;
-  mountHardware(document.getElementById('n-hardware'), 'n').catch(error => toast(error.message, true));
+  const save = document.getElementById('n-save'), saveAndOpen = document.getElementById('n-save-open');
+  loadHardwareForm(document.getElementById('n-hardware'), 'n', {}, [save, saveAndOpen]);
 
   document.getElementById('n-proxy').onchange = () => {
     document.getElementById('n-proxy-result').textContent = '';
@@ -84,8 +85,8 @@ function initNewPage() {
     autoCheckNewProxy();
   };
   document.getElementById('n-proxy-check').onclick = () => autoCheckNewProxy(true);
-  document.getElementById('n-save').onclick = () => saveNewProfile(false);
-  document.getElementById('n-save-open').onclick = () => saveNewProfile(true);
+  save.onclick = () => saveNewProfile(false);
+  saveAndOpen.onclick = () => saveNewProfile(true);
 }
 
 function refreshNewProxySelect() {
@@ -435,7 +436,8 @@ function openProfileModal(existing) {
       <button class="btn primary" id="m-save">${isEdit ? '保存' : '创建'}</button>
     </div>
   `, (body, close) => {
-    mountHardware(body.querySelector('#f-hardware'), 'f', p).catch(error => toast(error.message, true));
+    const save = body.querySelector('#m-save');
+    loadHardwareForm(body.querySelector('#f-hardware'), 'f', p, [save]);
     const proxySel = body.querySelector('#f-proxy');
     const customBox = body.querySelector('#f-custom-proxy');
     if (p.proxy) {
@@ -484,7 +486,7 @@ function openProfileModal(existing) {
       }
     };
     body.querySelector('#m-cancel').onclick = close;
-    body.querySelector('#m-save').onclick = async () => {
+    save.onclick = async () => {
       if (isEdit && !['native', 'hardware', 'kernel'].includes(p.fingerprintMode) && !body.querySelector('#f-convert').checked) { toast('请先确认转换说明', true); return; }
       const name = body.querySelector('#f-name').value.trim();
       if (!name) { toast('请填写名称', true); return; }

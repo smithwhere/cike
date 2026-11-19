@@ -1,14 +1,19 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CIKE 环境检测</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/start.css"></head><body><main><header><span class="badge" id="number"></span><div><p class="eyebrow">CIKE · 环境检测</p><h1 id="name"></h1></div><button id="refresh">重新检测</button></header><section class="hero"><p>当前浏览器出口 IP</p><h2 id="ip">检测中…</h2><p id="status" role="status">通过当前环境的网络连接检测</p></section><section class="grid"><article><label>连接方式</label><strong id="route"></strong></article><article><label>IP 所在地区</label><strong id="region">等待检测</strong></article><article><label>浏览器时区</label><strong id="timezone"></strong></article><article><label>出口时区</label><strong id="exit-timezone">等待检测</strong></article><article><label>浏览器语言</label><strong id="language"></strong></article><article><label>网络运营商</label><strong id="isp">等待检测</strong></article></section><p class="notice" id="match"></p>
   <details id="browser-values" class="browser-values">
     <summary>当前网页读到的参数</summary>
-    <p>这些读数在本页计算。定位权限仅反映此页。</p>
+    <p id="readout-mode"></p>
+    <p>同一环境的窗口共享一份配置。比较不同环境时，先核对页首环境编号。Canvas 和音频摘要来自本页的固定测试样本。定位权限仅反映此页。</p>
     <section class="grid">
       <article class="wide"><label>User-Agent</label><strong id="readout-ua"></strong></article>
       <article><label>CSS 屏幕 / 视口 / DPR</label><strong id="readout-display"></strong></article>
+      <article><label>布局样本尺寸（RECTS）</label><strong id="readout-rects"></strong></article>
       <article><label>语言列表</label><strong id="readout-languages"></strong></article>
       <article><label>CPU 线程 / 网页内存</label><strong id="readout-hardware"></strong></article>
       <article><label>网页外观 / 动画 / 强制配色 / 对比度</label><strong id="readout-appearance"></strong></article>
       <article class="wide"><label>WebGL 渲染器 / WebGPU 接口</label><strong id="readout-graphics"></strong></article>
+      <article><label>Canvas 2D 样本</label><strong id="readout-canvas">检测中…</strong></article>
+      <article><label>离线音频样本</label><strong id="readout-audio">检测中…</strong></article>
+      <article><label>浏览器报告的插件</label><strong id="readout-plugins"></strong></article>
       <article><label>常见本机字体样本</label><strong id="readout-fonts">检测中…</strong></article>
       <article><label>浏览器报告支持的编解码格式</label><strong id="readout-codecs"></strong></article>
       <article><label>连接估计</label><strong id="readout-network"></strong></article>
