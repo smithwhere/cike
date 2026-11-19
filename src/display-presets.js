@@ -1,4 +1,5 @@
 'use strict';
+const { randomInt } = require('node:crypto');
 
 // October 2026 Steam/Statcounter surveys and representative display specifications.
 const PRESETS = [
@@ -25,6 +26,11 @@ const PRESETS = [
 ];
 const SCALES = [100, 125, 150, 175, 200, 225, 250, 300];
 const MIN_CSS_SIZE = 320;
+const RANDOM_WINDOWS_DISPLAYS = [
+  { preset: 'hd', scale: 100 }, { preset: 'fhd', scale: 100 }, { preset: 'fhd', scale: 125 },
+  { preset: 'qhd', scale: 100 }, { preset: 'qhd', scale: 125 }, { preset: 'wqxga', scale: 125 },
+  { preset: 'wuxga', scale: 125 }, { preset: 'uhd', scale: 175 },
+];
 
 function availableScales({ width, height }) {
   return SCALES.filter(scale => Math.min(width, height) * 100 >= MIN_CSS_SIZE * scale);
@@ -33,6 +39,12 @@ function availableScales({ width, height }) {
 function displayCatalog(platform) {
   if (platform !== 'win') return null;
   return { presets: PRESETS.map(preset => ({ ...preset, scales: availableScales(preset) })), scales: SCALES };
+}
+
+function randomDisplay(platform, previous) {
+  if (platform !== 'win') return null;
+  const choices = RANDOM_WINDOWS_DISPLAYS.filter(({ preset, scale }) => preset !== previous?.preset || scale !== previous?.scale);
+  return { ...choices[randomInt(choices.length)] };
 }
 
 function emulatedDisplay(display, platform) {
@@ -49,4 +61,4 @@ function emulatedDisplay(display, platform) {
   return { screen, viewport: { ...screen }, deviceScaleFactor };
 }
 
-module.exports = { displayCatalog, emulatedDisplay };
+module.exports = { displayCatalog, emulatedDisplay, randomDisplay };

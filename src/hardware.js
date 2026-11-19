@@ -66,9 +66,9 @@ function hardwareOptions() {
   return { cpus: CPU_VALUES, memories: MEMORY_VALUES,
     gpus: Object.entries(GPU_PRESETS).map(([id, gpu]) => ({ id, name: gpu.name })) };
 }
-function generateHardware(platform = process.platform, arch = process.arch) {
+function generateHardware(platform = process.platform, arch = process.arch, previousGpu = null) {
   const choose = list => list[crypto.randomInt(list.length)];
-  const gpuChoices = Object.keys(GPU_PRESETS).filter(id => id !== 'native' && id.startsWith('apple-') === (platform === 'darwin'));
+  const gpuChoices = Object.keys(GPU_PRESETS).filter(id => id !== 'native' && id !== previousGpu && id.startsWith('apple-') === (platform === 'darwin'));
   const gpuPreset = platform === 'darwin' && arch !== 'arm64' ? 'native' : choose(gpuChoices);
   return { fingerprintMode: 'hardware', hardwareConcurrency: choose(RANDOM_CPU_VALUES), deviceMemory: choose(RANDOM_MEMORY_VALUES),
     gpuPreset, canvasNoise: true, audioNoise: true, fingerprintSeed: crypto.randomBytes(16).toString('hex') };

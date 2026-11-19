@@ -65,6 +65,8 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.evaluate(() => { const script = document.createElement('script'); script.textContent = 'window.inlineRan = true'; document.body.append(script); });
     assert.equal(await page.evaluate(() => window.inlineRan), undefined);
     await page.getByRole('button', { name: '新建环境', exact: true }).click();
+    await page.locator('#n-fingerprint-mode').waitFor();
+    assert.equal(await page.locator('#n-fingerprint-mode').inputValue(), 'random');
     await page.locator('#n-fingerprint-mode').selectOption('hardware');
     await page.locator('#n-hardware-generate').click();
     await page.waitForFunction(() => document.querySelector('#n-fingerprint-seed')?.value.length === 32);
@@ -237,6 +239,23 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       await page.locator('[data-page="profiles"]').click();
       await kernelCard.locator('[data-act="close"]').click();
       await kernelCard.getByText('已关闭', { exact: true }).waitFor();
+    }
+    const generated = [];
+    for (let i = 0; i < 2; i++) {
+      await page.getByRole('button', { name: '新建环境', exact: true }).click();
+      assert.equal(await page.locator('#n-fingerprint-mode').inputValue(), 'random');
+      const created = page.waitForResponse(response => response.url().endsWith('/api/profiles') && response.request().method() === 'POST');
+      await page.locator('#n-save').click();
+      const response = await created;
+      assert.equal(response.status(), 200);
+      generated.push((await response.json()).profile);
+      await page.locator('#page-profiles').waitFor({ state: 'visible' });
+    }
+    assert.ok(generated.every(profile => profile.fingerprintMode === 'hardware'));
+    assert.notEqual(generated[0].fingerprintSeed, generated[1].fingerprintSeed);
+    if (process.platform === 'win32') {
+      assert.notEqual(generated[0].gpuPreset, generated[1].gpuPreset);
+      assert.notDeepEqual(generated[0].display, generated[1].display);
     }
   } finally { await app?.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

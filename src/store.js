@@ -5,7 +5,8 @@ const crypto = require('crypto');
 const { HOST_PLATFORM, validateProfile } = require('./fingerprint');
 const { privateDirectory, readJSON, writeJSON, credentials } = require('./privatefiles');
 const { validateInlineProxy } = require('./proxyconfig');
-const { completeHardware } = require('./hardware');
+const { completeHardware, generateHardware } = require('./hardware');
+const { randomDisplay } = require('./display-presets');
 const { resolveUserAgent } = require('./user-agents');
 
 const DEFAULT_SPEC = {
@@ -46,6 +47,11 @@ class ProfileStore {
     writeJSON(this.file, records);
   }
   create(spec = {}) {
+    if (spec.fingerprintMode === 'random') {
+      const previous = Object.values(this.profiles).at(-1);
+      spec = { ...spec, ...generateHardware(process.platform, process.arch, previous?.gpuPreset),
+        userAgent: 'random', display: randomDisplay(HOST_PLATFORM, previous?.display) };
+    }
     const id = 'p_' + crypto.randomBytes(6).toString('hex');
     const now = new Date().toISOString();
     const sequence = this.sequence + 1;

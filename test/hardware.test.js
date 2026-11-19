@@ -169,6 +169,32 @@ test('region and appearance choices survive reopening and feed browser context o
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('two automatic creations persist fresh settings and keep manual creation available', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-random-profiles-'));
+  try {
+    const store = new ProfileStore(dir);
+    const first = store.create({ fingerprintMode: 'random', locale: 'zh-CN' });
+    const second = store.create({ fingerprintMode: 'random' });
+    const reopened = new ProfileStore(dir);
+    for (const profile of [first, second]) {
+      assert.equal(profile.fingerprintMode, 'hardware');
+      assert.equal(profile.canvasNoise, true);
+      assert.equal(profile.audioNoise, true);
+      assert.match(profile.fingerprintSeed, /^[a-f0-9]{32}$/);
+      assert.deepEqual(reopened.get(profile.id), profile);
+    }
+    assert.equal(first.locale, 'zh-CN');
+    assert.notEqual(first.fingerprintSeed, second.fingerprintSeed);
+    if (first.gpuPreset !== 'native') assert.notEqual(first.gpuPreset, second.gpuPreset);
+    if (HOST_PLATFORM === 'win') {
+      assert.notDeepEqual(first.display, second.display);
+      assert.notDeepEqual(buildContextOptions(first).options.viewport, buildContextOptions(second).options.viewport);
+    }
+    assert.equal(store.create({}).fingerprintMode, 'native');
+    assert.throws(() => store.update(first.id, { fingerprintMode: 'random' }), { status: 400 });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('new profiles default to native UA, and explicit UA choices persist', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-user-agent-'));
   try {

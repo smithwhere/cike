@@ -29,6 +29,7 @@ async function mountHardware(root, prefix, profile = {}) {
   });
   const options = await hardwareOptionsPromise;
   if (!root.isConnected) return;
+  const creating = !profile.id;
   const kernel = profile.fingerprintMode === 'kernel', hardware = profile.fingerprintMode === 'hardware', simulated = kernel || hardware;
   const choices = (values, selected, label = String) => values.map(value => `<option value="${esc(value)}" ${value === selected ? 'selected' : ''}>${esc(label(value))}</option>`).join('');
   const locales = [...new Set(['auto', ...options.locales, profile.locale || 'auto'])];
@@ -48,15 +49,16 @@ async function mountHardware(root, prefix, profile = {}) {
       <div class="field"><label for="${prefix}-contrast">网页对比度偏好</label><select id="${prefix}-contrast" class="input">${choices(Object.keys(CONTRAST_PREFERENCES), mediaValue(profile.contrast, 'no-preference'), value => CONTRAST_PREFERENCES[value])}</select></div>
       <div class="field"><label for="${prefix}-forced-colors">网页强制配色</label><select id="${prefix}-forced-colors" class="input">${choices(Object.keys(FORCED_COLORS), mediaValue(profile.forcedColors, 'none'), value => FORCED_COLORS[value])}</select></div>
     </div>
-    <div class="field"><label>指纹策略</label><select id="${prefix}-fingerprint-mode" class="input"><option value="native" ${simulated ? '' : 'selected'}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
+    <div class="field"><label for="${prefix}-fingerprint-mode">指纹策略</label><select id="${prefix}-fingerprint-mode" class="input">${creating ? '<option value="random" selected>创建时随机分配（Chromium 软件层）</option>' : ''}<option value="native" ${!creating && !simulated ? 'selected' : ''}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
     <p class="hint">同一环境里的窗口共享一份设置。原生一致模式下，同一台电脑上的不同环境也可能读到相同的 GPU、Canvas、音频和字体。</p>
-    ${displays ? `<div class="field-row">
+    ${creating ? `<p id="${prefix}-random-hint" class="hint">每次创建时分配一组 CPU、网页内存、显卡标识和 Canvas／音频种子，并保存下来。${displays ? 'Windows 同时抽取显示预设。' : ''}插件和字体由浏览器与系统提供。</p>` : ''}
+    ${displays ? `<div id="${prefix}-display-fields"><div class="field-row">
       <div class="field"><label for="${prefix}-display-preset">显示测试预设</label><select id="${prefix}-display-preset" class="input" aria-describedby="${prefix}-display-summary">
         <option value="">跟随系统</option>
         ${displays.presets.map(({ id, name, width, height }) => `<option value="${esc(id)}" ${id === profile.display?.preset ? 'selected' : ''}>${width}×${height} · ${esc(name)}</option>`).join('')}
       </select></div>
       <div class="field"><label for="${prefix}-display-scale">测试缩放</label><select id="${prefix}-display-scale" class="input"></select></div>
-    </div><p id="${prefix}-display-summary" class="hint" aria-live="polite"></p>` : ''}
+    </div><p id="${prefix}-display-summary" class="hint" aria-live="polite"></p></div>` : ''}
     <div id="${prefix}-hardware-fields" class="${simulated ? '' : 'hidden'}">
       <div class="field-row"><div class="field"><label>CPU 线程数</label><select id="${prefix}-hardware-cpu" class="input">${choices(options.cpus, profile.hardwareConcurrency || 8)}</select></div>
       <div id="${prefix}-software-memory" class="field ${kernel ? 'hidden' : ''}"><label>网页内存值（GB）</label><select id="${prefix}-hardware-memory" class="input">${choices(options.memories, profile.deviceMemory || 8, value => value >= 48 ? `${value}（测试值）` : value)}</select></div></div>
@@ -93,7 +95,9 @@ async function mountHardware(root, prefix, profile = {}) {
   const selectedUserAgents = { [profile.fingerprintMode]: profile.userAgent || '' };
   const syncMode = () => {
     const mode = field('fingerprint-mode').value;
-    field('hardware-fields').classList.toggle('hidden', mode === 'native');
+    field('hardware-fields').classList.toggle('hidden', mode !== 'hardware' && mode !== 'kernel');
+    if (creating) field('random-hint').classList.toggle('hidden', mode !== 'random');
+    if (displays) field('display-fields').classList.toggle('hidden', mode === 'random');
     for (const id of ['software-memory', 'software-noise', 'software-hint']) field(id).classList.toggle('hidden', mode !== 'hardware');
     field('kernel-hint').classList.toggle('hidden', mode !== 'kernel');
     const presets = options.userAgents?.[mode] || [];
@@ -143,6 +147,7 @@ function readHardware(root, prefix, fallback = {}) {
     contrast: readMedia('contrast', 'contrast', 'no-preference'),
     forcedColors: readMedia('forced-colors', 'forcedColors', 'none'),
   };
+  if (mode === 'random') return { ...common, fingerprintMode: 'random' };
   if (mode === 'native') return { ...common, fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
   if (mode === 'kernel') return { ...common, fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
     userAgent, deviceMemory: null, gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset || 'native', canvasNoise: false, audioNoise: false,

@@ -167,6 +167,9 @@ async function saveNewProfile(openAfter = false) {
     const r = await api('/api/profiles', { method: 'POST', body: JSON.stringify(spec) });
     const seed = document.getElementById('n-fingerprint-seed');
     if (seed) { seed.value = ''; document.getElementById('n-hardware-id').textContent = '保存时生成固定配置编号'; }
+    const mode = document.getElementById('n-fingerprint-mode');
+    mode.value = 'random';
+    mode.dispatchEvent(new Event('change'));
     toast('环境已创建');
     // Reset form
     await loadProfiles();
