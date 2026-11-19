@@ -98,7 +98,7 @@ npm run pack:win-x64
 
 ```text
 dist/CIKE-win32-x64/CIKE.exe
-dist/CIKE-0.10.3-windows-x64.zip
+dist/CIKE-0.11-windows-x64.zip
 dist/SHA256SUMS.txt
 ```
 
@@ -110,7 +110,9 @@ fork 后在 GitHub 的 Actions 页面启用工作流。`main`、`windows` 和 `w
 
 工作流在 Windows runner 上检查 API/凭据存储、代理与浏览器回归、硬件模拟及 Worker 一致性、最大化和全屏继承、CIKE 内核下载与版本检测、真实内核迁移和删除后的登录数据保留，以及源码和打包后桌面应用的设置操作。所有步骤通过后才上传应用。
 
-**Publish Windows Release** 可以复用已通过的 Windows 构建发布 Release。手动运行时填写构建运行 ID 与 `v0.10.3-windows.1` 形式的标签；工作流确认应用源码一致、校验压缩包后，上传应用与校验文件并发布。
+Windows 正式发布使用 `v0.11`、`v0.12` 这样的两段标签。每次发布递增次版本号，`package.json` 和 `package-lock.json` 的对应版本为 `0.11.0`、`0.12.0`，Windows 压缩包使用两段版本号。
+
+**Publish Windows Release** 复用已通过的 Windows 构建。手动运行时填写构建运行 ID 和对应标签。工作流检查标签是否与应用版本相符，确认构建源码一致，校验压缩包，再上传文件并发布。已有标签和下载链接可继续使用。
 
 ## 验证范围与实机验收
 

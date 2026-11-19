@@ -8,7 +8,7 @@ name: Publish Windows Release
         type: string
         required: true
       tag:
-        description: Windows release tag
+        description: Windows release tag, for example v0.11
         type: string
         required: true
 
@@ -42,8 +42,9 @@ jobs:
             const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
             const tag = process.env.RELEASE_TAG;
             if (!/^\d+$/.test(process.env.SOURCE_RUN)) throw new Error('Invalid build run ID');
-            if (!tag.startsWith(`v${version}-windows.`) || !/^v\d+\.\d+\.\d+-windows\.\d+$/.test(tag)) {
-              throw new Error('Release tag must match the application version');
+            const match = /^(\d+\.\d+)\.0$/.exec(version);
+            if (!match || tag !== `v${match[1]}`) {
+              throw new Error('Use vMAJOR.MINOR to match package version MAJOR.MINOR.0');
             }
             const { data: run } = await github.rest.actions.getWorkflowRun({
               ...context.repo, run_id: Number(process.env.SOURCE_RUN),
@@ -59,8 +60,7 @@ jobs:
               if (!existing.draft) throw new Error('This release is already published');
             } catch (error) { if (error.status !== 404) throw error; }
             core.setOutput('sha', run.head_sha);
-            core.setOutput('version', version);
-            core.setOutput('filename', `CIKE-${version}-windows-x64.zip`);
+            core.setOutput('filename', `CIKE-${match[1]}-windows-x64.zip`);
             core.setOutput('build_url', run.html_url);
       - name: Confirm the artifact matches the application source
         env:
@@ -88,7 +88,7 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
-          name: CIKE ${{ steps.source.outputs.version }} Windows x64
+          name: CIKE ${{ env.RELEASE_TAG }} Windows x64
           draft: true
           prerelease: false
           overwrite_files: false
@@ -97,26 +97,19 @@ jobs:
             release-files/${{ steps.source.outputs.filename }}
             release-files/SHA256SUMS.txt
           body: |
-            CIKE Windows x64 免安装版，基于 v${{ steps.source.outputs.version }}。
+            CIKE ${{ env.RELEASE_TAG }} Windows x64 免安装版。
 
             - 适用于 Windows 10/11 的 Intel、AMD 64 位电脑。
-            - 下载 `${{ steps.source.outputs.filename }}`，完整解压后双击 `CIKE.exe`；首次在「设置」下载 Chromium。
+            - 下载 `${{ steps.source.outputs.filename }}`，完整解压后双击 `CIKE.exe`。首次使用时在「设置」下载 Chromium。
             - 数据默认保存在 `%LOCALAPPDATA%\CIKE`，程序更新时保留。
 
-            本版修复 Camoufox 内容进程或协议页面目标消失时，CIKE 连带关闭整个环境的问题。关闭协议失去响应时按时限清理该环境自身的浏览器进程，避免 CIKE 退出后留在后台、再次双击无法打开。
-
-            - 旧环境及异常退出后的启动缓存会先备份再重建，保留 Cookie、登录数据库、站点存储和用户设置。无需删除环境或重新下载内核。
-            - 兼容绘制补充关闭 Canvas 和视频硬件加速。继续在「设置 → Camoufox 指纹内核 → 图形渲染」选择模式，保存并重新打开环境后生效；软件绘制可能增加 CPU 占用并改变图形指纹。
-            - 新增「导出崩溃诊断」，将系统/内核版本、绘制模式、错误类别和可取得的原生崩溃注释保存为本地 JSON。报告不包含原始浏览日志、代理密码、Cookie 或内存转储，不会自动发送。
-            - 官方下载入口暂时不可用时，可使用同一官方文件的 GitHub API 备用入口，继续验证锁定的 SHA-256。
-
-            更新方法：完全退出旧版 CIKE 和所有环境，将新版完整解压到新目录，再启动 CIKE.exe。现有内核位置、环境、Cookie、登录数据及代理设置继续使用。旧版进程如仍留在后台，可先用任务管理器结束旧版 CIKE 后再启动新版。
+            更新时请完全退出 CIKE 和所有环境。将新版完整解压到新目录，再启动 `CIKE.exe`。应用继续使用现有数据目录。
 
             [本次发布的 Windows 构建与测试记录](${{ steps.source.outputs.build_url }})。
 
             [Windows 使用说明](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/docs/WINDOWS.md)。
 
-            这是独立 Windows 移植版，未签名，更新需手动替换。校验文件见 `SHA256SUMS.txt`。
+            该 Windows 移植包使用手动更新。下载后可用 `SHA256SUMS.txt` 校验压缩包。
       - name: Publish the completed release
         uses: actions/github-script@v7
         env:
