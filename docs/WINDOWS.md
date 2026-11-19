@@ -67,11 +67,11 @@ Firefox 的原生窗口和自动化协议里的页面目标并非一一对应。
 
 可在“设置 → 浏览器窗口”选择记住上次状态、始终最大化、始终全屏，或按环境分辨率打开。Windows 的页面尺寸随实际窗口变化；环境中的分辨率用于普通窗口启动大小，无头自动化仍使用环境配置。
 
-“新建／编辑环境 → 指纹选项 → 显示测试预设”提供 17 种屏幕尺寸与 100%、125%、150%、175%、200% 五档缩放。其中紧凑和兼容性尺寸包括 1280×720、1280×800、1440×900、1600×900、1680×1050 和 2560×1080，也提供 3840×1600 超宽屏和 3840×2400 笔记本屏幕。预设按环境保存，新标签页及新窗口沿用该环境的设置。以 FHD 125% 为例，100% 页面缩放下 CSS 屏幕与默认视口为 1536×864，DPR 为 1.25。高分辨率规格参考 [Dell U3824DW](https://www.dell.com/en-us/shop/monitors/apd/dell-ultrasharp-38-curved-usbc-hub-monitor-u3824dw-9525cm-375-spkr/u3824dw_withstand/) 和 [Lenovo ThinkPad P16 Gen 2](https://psref.lenovo.com/Product/ThinkPad/ThinkPad_P16_Gen_2)。
+“新建／编辑环境 → 指纹选项 → 显示测试预设”提供 20 种屏幕尺寸和 100% 至 300% 八档缩放，包括 2240×1400、3200×2000 和 5120×2160。每种分辨率只显示能让 CSS 视口宽高都至少达到 320 的缩放档位。预设按环境保存，新标签页及新窗口沿用设置。以 3200×2000、250% 为例，100% 页面缩放下 CSS 屏幕与默认视口为 1280×800，DPR 为 2.5。规格参考 [Windows 显示指南](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/display)、[ThinkPad T14 Gen 5](https://psref.lenovo.com/product/ThinkPad/ThinkPad_T14_Gen_5_Intel?tab=spec)、[ThinkPad P1 Gen 9](https://psref.lenovo.com/Product/ThinkPad/ThinkPad_P1_Gen_9) 和 [LG 5K2K 显示器](https://www.lg.com/us/press-release/LG_Eletronics_USA_UltraWide_UltraFine_Press_Release_5.4.26.pdf)。
 
 选中测试预设的环境使用固定视口，独立于自动最大化和全屏继承。Camoufox 中网页明确指定了弹窗宽高时，弹窗以该宽高作为视口，仍沿用环境的屏幕尺寸和 DPR。面板、色域、HDR 和刷新率是典型产品规格，实际硬件状态由系统和浏览器决定。选择“跟随系统”可恢复普通窗口行为。2026 年 10 月分辨率参考 [Steam 硬件调查](https://store.steampowered.com/hwsurvey/hw/) 和 [Statcounter 桌面屏幕统计](https://gs.statcounter.com/screen-resolution-stats/desktop)。
 
-同一设置区还提供 53 个语言区域和 56 个时区选项，以及网页的浅色、深色、跟随系统和动画偏好。打开环境检测页中的“当前网页读到的参数”，可以核对 UA、CSS 屏幕、视口、DPR、语言列表、CPU／网页内存、外观、WebGL／WebGPU、常见字体、编解码格式、连接估计和该页定位权限。读数在本页计算。参数参考 [Unicode CLDR](https://cldr.unicode.org/translation/translation-guide-general/default-content)、[IANA 时区数据库](https://www.iana.org/time-zones) 和 [Windows 11 字体清单](https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list)。
+同一设置区还提供 61 个语言区域和 64 个时区选项，以及网页外观、动画偏好、对比度偏好和强制配色。打开环境检测页中的“当前网页读到的参数”，可以核对 UA、CSS 屏幕、视口、DPR、语言列表、CPU／网页内存、外观、WebGL／WebGPU、常见字体、编解码格式、连接估计和该页定位权限。读数在本页计算。参数参考 [Unicode CLDR](https://cldr.unicode.org/translation/translation-guide-general/default-content)、[IANA 时区数据库](https://www.iana.org/time-zones)、[CSS 强制配色](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/%40media/forced-colors) 和 [Windows 11 字体清单](https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list)。
 
 ## 数据和更新
 

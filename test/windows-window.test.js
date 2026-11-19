@@ -41,10 +41,12 @@ for (const engine of ['Chromium', 'Camoufox']) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-display-window-'));
     const store = new ProfileStore(root);
     const manager = new BrowserManager(store, null, new Settings(root), { startPage: false, downloadsDirectory: path.join(root, 'Downloads') });
-    const expected = { screen: [1536, 864], viewport: [1536, 864], dpr: 1.25 };
-    const metrics = () => ({ screen: [screen.width, screen.height], viewport: [innerWidth, innerHeight], dpr: devicePixelRatio });
+    const expected = { screen: [1280, 800], viewport: [1280, 800], dpr: 2.5, contrast: true, forcedColors: false };
+    const metrics = () => ({ screen: [screen.width, screen.height], viewport: [innerWidth, innerHeight], dpr: devicePixelRatio,
+      contrast: matchMedia('(prefers-contrast: more)').matches, forcedColors: matchMedia('(forced-colors: active)').matches });
     try {
-      const profile = store.create({ display: { preset: 'fhd', scale: 125 }, ...(kernel ? { fingerprintMode: 'kernel', hardwareConcurrency: 8 } : {}) });
+      const profile = store.create({ display: { preset: '3k2', scale: 250 }, contrast: 'more', forcedColors: 'none',
+        ...(kernel ? { fingerprintMode: 'kernel', hardwareConcurrency: 8 } : {}) });
       await manager.open(profile.id);
       const context = manager.getContext(profile.id), page = context.pages()[0];
       assert.deepEqual(await page.evaluate(metrics), expected);

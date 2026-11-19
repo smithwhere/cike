@@ -40,7 +40,7 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
 
 test('random generation uses every supported CPU and memory choice once per pool index', (t) => {
   const cpus = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 32];
-  const memories = [4, 8];
+  const memories = [4, 8, 16, 32];
   const indexes = new Map();
   t.mock.method(crypto, 'randomInt', size => indexes.get(size) ?? 0);
 
@@ -58,7 +58,7 @@ test('random generation uses every supported CPU and memory choice once per pool
 
 test('simulated GPU presets remain selectable, with platform-specific random pools', (t) => {
   const presets = hardwareOptions().gpus.filter(({ id }) => id !== 'native');
-  assert.equal(presets.length, 42);
+  assert.equal(presets.length, 46);
   let gpuIndex = 0;
   const poolSizes = new Set([5, presets.length - 5]);
   t.mock.method(crypto, 'randomInt', size => poolSizes.has(size) ? gpuIndex : 0);
@@ -81,7 +81,7 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
   let index = 0;
   t.mock.method(crypto, 'randomInt', () => index);
 
-  for (const [platform, counts] of [['win', { hardware: 31, kernel: 32 }], ['mac', { hardware: 11, kernel: 17 }]]) {
+  for (const [platform, counts] of [['win', { hardware: 31, kernel: 32 }], ['mac', { hardware: 14, kernel: 17 }]]) {
     const presets = userAgentPresets(platform);
     for (const [fingerprintMode, entries] of Object.entries(presets)) {
       assert.equal(entries.length, counts[fingerprintMode]);
@@ -100,7 +100,7 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
       }
     }
   }
-  assert.equal(values.size, 91);
+  assert.equal(values.size, 94);
   assert.equal(resolveUserAgent({ platform: 'linux', fingerprintMode: 'hardware' }, 'random'), null);
   assert.equal(resolveUserAgent({ platform: 'win', fingerprintMode: 'native' }, 'random'), null);
 });
@@ -113,17 +113,21 @@ test('region and appearance choices survive reopening and feed browser context o
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-appearance-'));
   try {
     const store = new ProfileStore(dir);
-    const created = store.create({ locale: 'pt-BR', timezone: 'America/Sao_Paulo', colorScheme: 'dark', reducedMotion: 'reduce' });
+    const created = store.create({ locale: 'cs-CZ', timezone: 'Europe/Prague', colorScheme: 'dark', reducedMotion: 'reduce', contrast: 'more', forcedColors: 'active' });
     const saved = new ProfileStore(dir).get(created.id);
     const { options } = buildContextOptions(saved);
-    assert.equal(options.locale, 'pt-BR');
-    assert.equal(options.timezoneId, 'America/Sao_Paulo');
+    assert.equal(options.locale, 'cs-CZ');
+    assert.equal(options.timezoneId, 'Europe/Prague');
     assert.equal(options.colorScheme, 'dark');
     assert.equal(options.reducedMotion, 'reduce');
+    assert.equal(options.contrast, 'more');
+    assert.equal(options.forcedColors, 'active');
     assert.throws(() => store.update(created.id, { reducedMotion: 'invalid' }), { status: 400 });
-    const reset = store.update(created.id, { colorScheme: null, reducedMotion: null });
-    assert.equal(buildContextOptions(reset).options.colorScheme, null);
-    assert.equal(buildContextOptions(reset).options.reducedMotion, null);
+    assert.throws(() => store.update(created.id, { contrast: 'less' }), { status: 400 });
+    assert.throws(() => store.update(created.id, { forcedColors: true }), { status: 400 });
+    const reset = store.update(created.id, { colorScheme: null, reducedMotion: null, contrast: null, forcedColors: null });
+    const resetOptions = buildContextOptions(reset).options;
+    for (const key of ['colorScheme', 'reducedMotion', 'contrast', 'forcedColors']) assert.equal(resetOptions[key], null);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

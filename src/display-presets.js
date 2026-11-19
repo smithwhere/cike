@@ -19,17 +19,26 @@ const PRESETS = [
   { id: 'uwfhd', name: '超宽 FHD', width: 2560, height: 1080 },
   { id: 'uwqhd-plus', name: '超宽 QHD+', width: 3840, height: 1600, specs: '37.5 英寸曲面 · IPS Black' },
   { id: 'wquxga', name: '4K+ 笔记本', width: 3840, height: 2400, specs: '16 英寸 · IPS / OLED · 60 Hz · DCI-P3' },
+  { id: '2k2', name: '2.2K 笔记本', width: 2240, height: 1400, specs: '14 英寸 · IPS · 60 Hz · sRGB' },
+  { id: '3k2', name: '3.2K 笔记本', width: 3200, height: 2000, specs: '16 英寸 · 双层 OLED · 40–120 Hz VRR · DCI-P3' },
+  { id: '5k2k', name: '5K2K 超宽', width: 5120, height: 2160, specs: '40 英寸 · Nano IPS Black · DCI-P3' },
 ];
-const SCALES = [100, 125, 150, 175, 200];
+const SCALES = [100, 125, 150, 175, 200, 225, 250, 300];
+const MIN_CSS_SIZE = 320;
+
+function availableScales({ width, height }) {
+  return SCALES.filter(scale => Math.min(width, height) * 100 >= MIN_CSS_SIZE * scale);
+}
 
 function displayCatalog(platform) {
-  return platform === 'win' ? { presets: PRESETS, scales: SCALES } : null;
+  if (platform !== 'win') return null;
+  return { presets: PRESETS.map(preset => ({ ...preset, scales: availableScales(preset) })), scales: SCALES };
 }
 
 function emulatedDisplay(display, platform) {
   if (display == null) return null;
   const preset = PRESETS.find(option => option.id === display.preset);
-  if (platform !== 'win' || !preset || !SCALES.includes(display.scale) || Object.keys(display).length !== 2) {
+  if (platform !== 'win' || !preset || !availableScales(preset).includes(display.scale) || Object.keys(display).length !== 2) {
     throw Object.assign(new Error('请选择有效的 Windows 显示测试预设和缩放比例'), { status: 400 });
   }
   const deviceScaleFactor = display.scale / 100;

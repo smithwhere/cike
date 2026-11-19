@@ -100,7 +100,10 @@ valuesPanel.addEventListener('toggle', () => {
   const mode = matchMedia('(prefers-color-scheme: dark)').matches ? '深色' : '浅色';
   const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? '减少动画' : '无偏好';
   const colors = matchMedia('(forced-colors: active)').matches ? '启用' : '未启用';
-  text('readout-appearance', `${mode} / ${motion} / ${colors}`);
+  const contrast = matchMedia('(prefers-contrast: more)').matches ? '更高对比度'
+    : matchMedia('(prefers-contrast: less)').matches ? '更低对比度'
+      : matchMedia('(prefers-contrast: custom)').matches ? '自定义对比度' : '默认对比度';
+  text('readout-appearance', `${mode} / ${motion} / ${colors} / ${contrast}`);
   text('readout-graphics', graphicsReadout());
   text('readout-codecs', supportedCodecs());
   const connection = navigator.connection;

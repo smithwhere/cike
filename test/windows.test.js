@@ -16,10 +16,17 @@ const { ProfileStore } = require('../src/store');
 test('Windows display presets produce CSS sizes and DPR without changing the native default', () => {
   const { presets, scales } = displayCatalog('win');
   const expectedSizes = ['1920x1080', '2560x1440', '2560x1600', '3840x2160', '3440x1440', '1920x1200', '1366x768', '2880x1800', '5120x1440',
-    '1280x720', '1280x800', '1440x900', '1600x900', '1680x1050', '2560x1080', '3840x1600', '3840x2400'];
+    '1280x720', '1280x800', '1440x900', '1600x900', '1680x1050', '2560x1080', '3840x1600', '3840x2400', '2240x1400', '3200x2000', '5120x2160'];
   assert.deepEqual(presets.map(({ width, height }) => `${width}x${height}`), expectedSizes);
   assert.equal(new Set(presets.map(({ id }) => id)).size, presets.length);
-  assert.deepEqual(scales, [100, 125, 150, 175, 200]);
+  assert.deepEqual(scales, [100, 125, 150, 175, 200, 225, 250, 300]);
+  assert.deepEqual(presets.find(({ id }) => id === 'hd720').scales, [100, 125, 150, 175, 200, 225]);
+  for (const { id, scales: validScales } of presets) {
+    for (const scale of validScales) {
+      const { viewport } = emulatedDisplay({ preset: id, scale }, 'win');
+      assert.ok(viewport.width >= 320 && viewport.height >= 320);
+    }
+  }
   assert.equal(displayCatalog('mac'), null);
   assert.equal(emulatedDisplay(undefined, 'win'), null);
   assert.equal(emulatedDisplay(null, 'win'), null);
@@ -29,7 +36,10 @@ test('Windows display presets produce CSS sizes and DPR without changing the nat
   assert.deepEqual(emulatedDisplay({ preset: 'uwfhd', scale: 125 }, 'win'), {
     screen: { width: 2048, height: 864 }, viewport: { width: 2048, height: 864 }, deviceScaleFactor: 1.25,
   });
-  for (const choice of [{ preset: '__proto__', scale: 100 }, { preset: 'fhd', scale: '125' }, { preset: 'fhd', scale: 175, refreshRate: 240 }]) {
+  assert.deepEqual(emulatedDisplay({ preset: 'wquxga', scale: 250 }, 'win'), {
+    screen: { width: 1536, height: 960 }, viewport: { width: 1536, height: 960 }, deviceScaleFactor: 2.5,
+  });
+  for (const choice of [{ preset: '__proto__', scale: 100 }, { preset: 'fhd', scale: '125' }, { preset: 'fhd', scale: 175, refreshRate: 240 }, { preset: 'hd720', scale: 250 }]) {
     assert.throws(() => emulatedDisplay(choice, 'win'), { status: 400 });
   }
   assert.throws(() => emulatedDisplay({ preset: 'fhd', scale: 125 }, 'mac'), { status: 400 });
@@ -39,11 +49,11 @@ test('a saved display preset survives reopening and can be cleared to follow the
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-display-store-'));
   try {
     const store = new ProfileStore(root);
-    const display = { preset: 'uhd', scale: 150 };
+    const display = { preset: 'uhd', scale: 250 };
     const profile = store.create({ display });
     assert.deepEqual(new ProfileStore(root).get(profile.id).display, display);
     assert.deepEqual(store.update(profile.id, { name: 'renamed' }).display, display);
-    assert.throws(() => store.update(profile.id, { display: { preset: 'uhd', scale: 300 } }), { status: 400 });
+    assert.throws(() => store.update(profile.id, { display: { preset: 'hd720', scale: 250 } }), { status: 400 });
     assert.deepEqual(store.get(profile.id).display, display);
     assert.equal(store.update(profile.id, { display: null }).display, null);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }

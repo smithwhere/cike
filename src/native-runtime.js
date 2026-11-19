@@ -83,6 +83,7 @@ async function launchNative({ dataDir, directory, profile, proxy, headless, down
       ...display,
       ...(proxy ? { proxy: { ...proxy, bypass: bridge ? new URL(bridge.url).hostname : '' } } : {}),
       colorScheme: profile.colorScheme, reducedMotion: profile.reducedMotion,
+      contrast: profile.contrast, forcedColors: profile.forcedColors,
       firefoxUserPrefs: preferences, env: nativeEnvironment(config, preferences),
     });
     onContext(context);

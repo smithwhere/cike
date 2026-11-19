@@ -90,7 +90,7 @@ test('close during pending proxy detection cancels launch without recording a la
 test('default page detects through browser fetch, refreshes and reports failures without stale IP', async () => {
   const dir=temp(),store=new ProfileStore(dir),manager=new BrowserManager(store,null,null,{downloadsDirectory:path.join(dir,'downloads')});
   try {
-    const p=store.create({name:'<fixture>',locale:'en-US',timezone:'UTC',colorScheme:'dark',reducedMotion:'reduce'});await manager.open(p.id,{headless:true});
+    const p=store.create({name:'<fixture>',locale:'en-US',timezone:'UTC',colorScheme:'dark',reducedMotion:'reduce',forcedColors:'active'});await manager.open(p.id,{headless:true});
     const context=manager.getContext(p.id);let failed=false,calls=0,reported;
     await context.route('https://api.ipify.org/**',route=>{calls++;return failed?route.abort():route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8'})});});
     await context.route('https://ipwho.is/**',route=>route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8',country:'Fixture',timezone:{id:'Etc/UTC'},connection:{isp:'Test ISP'}})}));
@@ -103,7 +103,7 @@ test('default page detects through browser fetch, refreshes and reports failures
     await page.waitForFunction(() => document.getElementById('readout-ua').textContent === navigator.userAgent);
     assert.equal(await page.locator('#readout-display').innerText(), await page.evaluate(() => `${screen.width}×${screen.height} / ${innerWidth}×${innerHeight} / ${devicePixelRatio}`));
     assert.equal(await page.locator('#readout-languages').innerText(), await page.evaluate(() => navigator.languages.join('、')));
-    assert.match(await page.locator('#readout-appearance').innerText(), /深色 \/ 减少动画/);
+    assert.match(await page.locator('#readout-appearance').innerText(), /减少动画 \/ 启用 \/ .*对比度/);
     await page.waitForFunction(() => document.getElementById('readout-location').textContent !== '检测中…');
     await page.waitForFunction(() => document.getElementById('readout-fonts').textContent !== '检测中…');
     assert.equal(calls,1);

@@ -66,10 +66,17 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.locator('#n-tz').selectOption('America/Sao_Paulo');
     await page.locator('#n-color-scheme').selectOption('dark');
     await page.locator('#n-reduced-motion').selectOption('reduce');
+    await page.locator('#n-contrast').selectOption('more');
+    await page.locator('#n-forced-colors').selectOption('active');
     if (process.platform === 'win32') {
-      await page.locator('#n-display-preset').selectOption('fhd');
-      await page.locator('#n-display-scale').selectOption('125');
-      assert.match(await page.locator('#n-display-summary').textContent(), /1536×864.*1\.25/);
+      await page.locator('#n-display-preset').selectOption('3k2');
+      await page.locator('#n-display-scale').selectOption('250');
+      await page.locator('#n-display-preset').selectOption('hd720');
+      assert.equal(await page.locator('#n-display-scale option[value="250"]').count(), 0);
+      assert.equal(await page.locator('#n-display-scale').inputValue(), '225');
+      await page.locator('#n-display-preset').selectOption('3k2');
+      await page.locator('#n-display-scale').selectOption('250');
+      assert.match(await page.locator('#n-display-summary').textContent(), /1280×800.*2\.5/);
     }
     await page.locator('#n-save').click();
     await page.getByText('环境已创建', { exact: true }).waitFor();
@@ -79,8 +86,9 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.equal(created.gpuPreset, 'nvidia-rtx-4070');
     assert.equal(created.locale, 'pt-BR'); assert.equal(created.timezone, 'America/Sao_Paulo');
     assert.equal(created.colorScheme, 'dark'); assert.equal(created.reducedMotion, 'reduce');
+    assert.equal(created.contrast, 'more'); assert.equal(created.forcedColors, 'active');
     assert.equal(created.fingerprintSeed.length, 32);
-    if (process.platform === 'win32') assert.deepEqual(created.display, { preset: 'fhd', scale: 125 });
+    if (process.platform === 'win32') assert.deepEqual(created.display, { preset: '3k2', scale: 250 });
     assert.equal(await page.locator('#n-fingerprint-seed').inputValue(), '');
     assert.equal(JSON.parse(fs.readFileSync(profiles.file))[p.id].fingerprintMode, 'native');
     const hardwareCard = page.locator('.env-card').filter({ has: page.locator('.name', { hasText: /^2$/ }) });
@@ -92,9 +100,11 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.equal(await page.locator('#f-tz').inputValue(), 'America/Sao_Paulo');
     assert.equal(await page.locator('#f-color-scheme').inputValue(), 'dark');
     assert.equal(await page.locator('#f-reduced-motion').inputValue(), 'reduce');
+    assert.equal(await page.locator('#f-contrast').inputValue(), 'more');
+    assert.equal(await page.locator('#f-forced-colors').inputValue(), 'active');
     if (process.platform === 'win32') {
-      assert.equal(await page.locator('#f-display-preset').inputValue(), 'fhd');
-      assert.equal(await page.locator('#f-display-scale').inputValue(), '125');
+      assert.equal(await page.locator('#f-display-preset').inputValue(), '3k2');
+      assert.equal(await page.locator('#f-display-scale').inputValue(), '250');
     }
     assert.equal(await page.locator('#f-convert').count(), 0);
     const updatedProfile = page.waitForResponse(response => response.url().includes('/api/profiles/' + created.id) && response.request().method() === 'PATCH');

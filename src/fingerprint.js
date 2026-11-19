@@ -26,6 +26,8 @@ function validateProfile(profile) {
   if (!(profile.deviceScaleFactor >= 0.5 && profile.deviceScaleFactor <= 4)) bad('无效的缩放比例');
   if (![null, 'light', 'dark', 'no-preference'].includes(profile.colorScheme)) bad('无效的外观设置');
   if (profile.reducedMotion != null && !['reduce', 'no-preference'].includes(profile.reducedMotion)) bad('无效的动画偏好');
+  if (profile.contrast != null && !['more', 'no-preference'].includes(profile.contrast)) bad('无效的对比度偏好');
+  if (profile.forcedColors != null && !['active', 'none'].includes(profile.forcedColors)) bad('无效的强制配色设置');
   return emulatedDisplay(profile.display, profile.platform);
 }
 function buildContextOptions(profile) {
@@ -35,6 +37,8 @@ function buildContextOptions(profile) {
     deviceScaleFactor: profile.deviceScaleFactor,
     colorScheme: profile.colorScheme,
     reducedMotion: profile.reducedMotion,
+    contrast: profile.contrast,
+    forcedColors: profile.forcedColors,
     acceptDownloads: true,
     ignoreHTTPSErrors: false,
     bypassCSP: false,

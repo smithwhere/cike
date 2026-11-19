@@ -2,6 +2,9 @@
 const AUTOMATIC_REGION = '代理地区 / 无代理时跟随系统';
 const COLOR_SCHEMES = { light: '浅色', dark: '深色', system: '跟随系统', 'no-preference': '无偏好（兼容）' };
 const MOTION_PREFERENCES = { 'no-preference': '无偏好', reduce: '减少动画', system: '跟随系统' };
+const CONTRAST_PREFERENCES = { 'no-preference': '无偏好', more: '更高对比度', system: '跟随系统' };
+const FORCED_COLORS = { none: '关闭', active: '启用强制配色', system: '跟随系统' };
+const mediaValue = (value, defaultValue) => value === null ? 'system' : value ?? defaultValue;
 let hardwareOptionsPromise;
 async function mountHardware(root, prefix, profile = {}) {
   if (!hardwareOptionsPromise) hardwareOptionsPromise = api('/api/fingerprints/options');
@@ -12,8 +15,6 @@ async function mountHardware(root, prefix, profile = {}) {
   const locales = [...new Set(['auto', ...options.locales, profile.locale || 'auto'])];
   const timezones = [...new Set(['auto', ...options.timezones, profile.timezone || 'auto'])];
   const regionLabel = value => value === 'auto' ? AUTOMATIC_REGION : value;
-  const color = profile.colorScheme === null ? 'system' : profile.colorScheme ?? 'light';
-  const motion = profile.reducedMotion === null ? 'system' : profile.reducedMotion ?? 'no-preference';
   const displays = options.displays;
   root.innerHTML = `
     <div class="field-row">
@@ -21,8 +22,12 @@ async function mountHardware(root, prefix, profile = {}) {
       <div class="field"><label for="${prefix}-tz">时区</label><select id="${prefix}-tz" class="input">${choices(timezones, profile.timezone || 'auto', regionLabel)}</select></div>
     </div>
     <div class="field-row">
-      <div class="field"><label for="${prefix}-color-scheme">网页外观</label><select id="${prefix}-color-scheme" class="input">${choices(Object.keys(COLOR_SCHEMES), color, value => COLOR_SCHEMES[value])}</select></div>
-      <div class="field"><label for="${prefix}-reduced-motion">网页动画偏好</label><select id="${prefix}-reduced-motion" class="input">${choices(Object.keys(MOTION_PREFERENCES), motion, value => MOTION_PREFERENCES[value])}</select></div>
+      <div class="field"><label for="${prefix}-color-scheme">网页外观</label><select id="${prefix}-color-scheme" class="input">${choices(Object.keys(COLOR_SCHEMES), mediaValue(profile.colorScheme, 'light'), value => COLOR_SCHEMES[value])}</select></div>
+      <div class="field"><label for="${prefix}-reduced-motion">网页动画偏好</label><select id="${prefix}-reduced-motion" class="input">${choices(Object.keys(MOTION_PREFERENCES), mediaValue(profile.reducedMotion, 'no-preference'), value => MOTION_PREFERENCES[value])}</select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="${prefix}-contrast">网页对比度偏好</label><select id="${prefix}-contrast" class="input">${choices(Object.keys(CONTRAST_PREFERENCES), mediaValue(profile.contrast, 'no-preference'), value => CONTRAST_PREFERENCES[value])}</select></div>
+      <div class="field"><label for="${prefix}-forced-colors">网页强制配色</label><select id="${prefix}-forced-colors" class="input">${choices(Object.keys(FORCED_COLORS), mediaValue(profile.forcedColors, 'none'), value => FORCED_COLORS[value])}</select></div>
     </div>
     <div class="field"><label>指纹策略</label><select id="${prefix}-fingerprint-mode" class="input"><option value="native" ${simulated ? '' : 'selected'}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
     ${displays ? `<div class="field-row">
@@ -30,7 +35,7 @@ async function mountHardware(root, prefix, profile = {}) {
         <option value="">跟随系统</option>
         ${displays.presets.map(({ id, name, width, height }) => `<option value="${esc(id)}" ${id === profile.display?.preset ? 'selected' : ''}>${width}×${height} · ${esc(name)}</option>`).join('')}
       </select></div>
-      <div class="field"><label for="${prefix}-display-scale">测试缩放</label><select id="${prefix}-display-scale" class="input">${choices(displays.scales, profile.display?.scale ?? 100, scale => `${scale}%`)}</select></div>
+      <div class="field"><label for="${prefix}-display-scale">测试缩放</label><select id="${prefix}-display-scale" class="input"></select></div>
     </div><p id="${prefix}-display-summary" class="hint" aria-live="polite"></p>` : ''}
     <div id="${prefix}-hardware-fields" class="${simulated ? '' : 'hidden'}">
       <div class="field-row"><div class="field"><label>CPU 线程数</label><select id="${prefix}-hardware-cpu" class="input">${choices(options.cpus, profile.hardwareConcurrency || 8)}</select></div>
@@ -48,18 +53,21 @@ async function mountHardware(root, prefix, profile = {}) {
   const field = id => root.querySelector('#' + prefix + '-' + id);
   if (displays) {
     const preset = field('display-preset'), scale = field('display-scale');
-    const syncDisplay = () => {
+    const syncDisplay = requestedScale => {
       const selected = displays.presets.find(item => item.id === preset.value);
+      const scales = selected?.scales ?? displays.scales;
+      const activeScale = scales.includes(requestedScale) ? requestedScale : scales.at(-1);
+      scale.innerHTML = choices(scales, activeScale, value => `${value}%`);
       scale.disabled = !selected;
       const summary = field('display-summary');
       if (!selected) { summary.textContent = ''; return; }
-      const ratio = Number(scale.value) / 100;
+      const ratio = activeScale / 100;
       const width = Math.floor(selected.width / ratio), height = Math.floor(selected.height / ratio);
       const reference = selected.specs ? `硬件参考 ${selected.specs}。` : '';
       summary.textContent = `CSS 屏幕与视口 ${width}×${height}，DPR ${ratio}。测试窗口使用固定视口。${reference}`;
     };
-    preset.onchange = scale.onchange = syncDisplay;
-    syncDisplay();
+    preset.onchange = scale.onchange = () => syncDisplay(Number(scale.value));
+    syncDisplay(profile.display?.scale ?? 100);
   }
   const userAgent = field('user-agent');
   const selectedUserAgents = { [profile.fingerprintMode]: profile.userAgent || '' };
@@ -103,14 +111,18 @@ function readHardware(root, prefix, fallback = {}) {
   const userAgent = userAgentField ? userAgentField.value || null : fallback.userAgent ?? null;
   const preset = field('display-preset');
   const display = preset ? (preset.value ? { preset: preset.value, scale: Number(field('display-scale').value) } : null) : fallback.display ?? null;
-  const color = field('color-scheme')?.value ?? (fallback.colorScheme === null ? 'system' : fallback.colorScheme ?? 'light');
-  const motion = field('reduced-motion')?.value ?? (fallback.reducedMotion === null ? 'system' : fallback.reducedMotion ?? 'no-preference');
+  const readMedia = (id, key, defaultValue) => {
+    const value = field(id)?.value ?? mediaValue(fallback[key], defaultValue);
+    return value === 'system' ? null : value;
+  };
   const common = {
     display,
     locale: field('locale')?.value ?? fallback.locale ?? 'auto',
     timezone: field('tz')?.value ?? fallback.timezone ?? 'auto',
-    colorScheme: color === 'system' ? null : color,
-    reducedMotion: motion === 'system' ? null : motion,
+    colorScheme: readMedia('color-scheme', 'colorScheme', 'light'),
+    reducedMotion: readMedia('reduced-motion', 'reducedMotion', 'no-preference'),
+    contrast: readMedia('contrast', 'contrast', 'no-preference'),
+    forcedColors: readMedia('forced-colors', 'forcedColors', 'none'),
   };
   if (mode === 'native') return { ...common, fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
   if (mode === 'kernel') return { ...common, fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
