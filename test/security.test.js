@@ -202,12 +202,19 @@ test('site permissions open in their own running desktop environment', async () 
     const chromium = store.create(), firefox = store.create({ fingerprintMode: 'kernel' });
     await assert.rejects(manager.openSitePermissions(chromium.id), { status: 409 });
     const navigations = [];
-    for (const profile of [chromium, firefox]) manager.sessions.set(profile.id, { headless: false, context: {
-      newPage: async () => ({ goto: async url => navigations.push([profile.id, url]), bringToFront: async () => {} }),
+    manager.sessions.set(chromium.id, { headless: false, context: {
+      newPage: async () => ({ goto: async url => navigations.push([chromium.id, url]), bringToFront: async () => {} }),
+    } });
+    const frame = {};
+    manager.sessions.set(firefox.id, { headless: false, context: {
+      newPage: async () => ({ bringToFront: async () => navigations.push([firefox.id, 'focused']), _connection: { toImpl: () => ({
+        mainFrame: () => frame,
+        delegate: { navigateFrame: async (target, url) => { assert.equal(target, frame); navigations.push([firefox.id, url]); } },
+      }) } }),
     } });
     await manager.openSitePermissions(firefox.id);
     await manager.openSitePermissions(chromium.id);
-    assert.deepEqual(navigations, [[firefox.id, 'about:preferences#privacy'], [chromium.id, 'chrome://settings/content']]);
+    assert.deepEqual(navigations, [[firefox.id, 'focused'], [firefox.id, 'about:preferences#privacy'], [chromium.id, 'chrome://settings/content']]);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

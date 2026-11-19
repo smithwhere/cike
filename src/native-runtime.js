@@ -111,4 +111,15 @@ async function launchNative({ dataDir, directory, profile, proxy, headless, down
     await stopContext(context).catch(() => {}); throw error;
   }
 }
-module.exports = { launchNative };
+
+async function openNativeSitePermissions(page) {
+  const implementation = page._connection?.toImpl?.(page);
+  if (!implementation?.delegate?.navigateFrame) throw new Error('Camoufox 网站权限适配器不可用');
+  // Activate the tab while it still has a content target. Firefox loads this
+  // preferences page in its parent process, outside the content load events
+  // that Playwright's page.goto waits for.
+  await page.bringToFront();
+  await implementation.delegate.navigateFrame(implementation.mainFrame(), 'about:preferences#privacy');
+}
+
+module.exports = { launchNative, openNativeSitePermissions };

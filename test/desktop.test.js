@@ -235,7 +235,8 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       await kernelCard.getByText('兼容绘制', { exact: true }).waitFor();
       const sitePermissions = page.waitForResponse(item => item.url().endsWith('/sitePermissions'));
       await kernelCard.getByRole('button', { name: '网站权限' }).click();
-      assert.equal((await sitePermissions).status(), 200);
+      const firefoxPermissions = await sitePermissions;
+      assert.equal(firefoxPermissions.status(), 200, await firefoxPermissions.text());
       await page.locator('[data-page="settings"]').click();
       await page.waitForFunction(() => document.querySelector('#native-storage-notice').textContent.includes('请先关闭'));
       assert.equal(await page.locator('#btn-native-location').isDisabled(), true);
@@ -264,7 +265,8 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
         await card.getByText('运行中', { exact: true }).waitFor({ timeout: 30000 });
         const permissions = page.waitForResponse(item => item.url().endsWith(`/api/profiles/${fresh.id}/sitePermissions`));
         await card.getByRole('button', { name: '网站权限' }).click();
-        assert.equal((await permissions).status(), 200);
+        const chromiumPermissions = await permissions;
+        assert.equal(chromiumPermissions.status(), 200, await chromiumPermissions.text());
         await card.locator('[data-act="close"]').click();
         await card.getByText('已关闭', { exact: true }).waitFor();
       }

@@ -290,13 +290,21 @@ class BrowserManager {
     if (!session || session.headless || profile.deleting || this.closing.has(id)) {
       throw Object.assign(new Error('请先打开此环境，再管理网站权限'), { status: 409 });
     }
-    const url = profile.fingerprintMode === 'kernel' ? 'about:preferences#privacy' : 'chrome://settings/content';
-    const page = await session.context.newPage();
+    let page, timedOut = false;
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.bringToFront();
+      const opened = await within(async () => {
+        page = await session.context.newPage();
+        if (timedOut) { await page.close(); return; }
+        if (profile.fingerprintMode === 'kernel') {
+          await require('./native-runtime').openNativeSitePermissions(page);
+        } else {
+          await page.goto('chrome://settings/content', { waitUntil: 'domcontentloaded', timeout: 10000 });
+          await page.bringToFront();
+        }
+      }, 15000);
+      if (!opened.completed) { timedOut = true; throw new Error('网站权限页面打开超时'); }
     } catch (error) {
-      await page.close().catch(() => {});
+      if (page) await within(() => page.close(), 1000).catch(() => {});
       throw new Error('无法打开网站权限页面，请从此环境的浏览器设置进入', { cause: error });
     }
   }
