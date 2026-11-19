@@ -41,6 +41,8 @@
 
 当前内核有多个 UA 预设时，默认创建会避开上一份环境的 UA。传统 `User-Agent` 请求头和 `navigator.userAgent` 使用保存的预设，`Sec-CH-UA` 和 `navigator.userAgentData` 使用内核值。
 
+手动配置软件层或内核模式时，User-Agent 下拉框可以选择「从可选 UA 预设随机」。保存时从该系统和内核的可选预设中抽取一条，包含其他主版本的兼容性预设。环境重开时继续使用保存的 UA。
+
 Windows x64 手动预设各收录最近 30 个正式主版本的默认 UA。软件层模式可选 Chrome 129–158，内核模式可选 Firefox 131–160。截至 2026 年 11 月 19 日，Chrome 158 已面向普通用户发布，159 仍处于抢先推送阶段。Firefox 正式版 160.0.1 的 UA 版本标记为 `160.0`。每个主版本只收录一条对应的 Win64 默认 UA，补丁升级共用同一条。版本及格式参考 [Chrome Windows 稳定版记录](https://versionhistory.googleapis.com/v1/chrome/platforms/win64/channels/stable/versions)、[Chrome 发布公告](https://chromereleases.googleblog.com/2026/11/)、[Chromium UA 精简说明](https://www.chromium.org/updates/ua-reduction/)、[Firefox 正式版记录](https://product-details.mozilla.org/1.0/firefox_history_major_releases.json) 和 [Firefox UA 格式](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent/Firefox)。
 
 软件层还提供 Edge、Opera、Vivaldi 及此前的 Chrome 兼容性预设。完整版本号和 Vivaldi 品牌标记属于兼容性测试格式。Chromium 158 的自动抽取范围为 6 个预设，旧环境编辑时仍可选择已保存的 UA。其他版本参考 [Edge 发布排期](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-release-schedule)、[Edge Beta 发布记录](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-relnote-beta-channel)、[Opera 发布记录](https://blogs.opera.com/desktop/) 和 [Vivaldi 桌面发布记录](https://vivaldi.com/blog/desktop/)。

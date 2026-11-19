@@ -92,7 +92,10 @@ class ProfileStore {
     const record = completeHardware({ ...structuredClone(DEFAULT_SPEC), ...pick(spec), id,
       name: String(spec.name || '').trim() || String(sequence), sequence,
       viewport: { ...DEFAULT_SPEC.viewport, ...spec.viewport }, createdAt: now, updatedAt: now }, spec);
-    record.userAgent = resolveUserAgent(record, record.userAgent, previous?.userAgent);
+    const priorAgent = record.userAgent === 'random-preset'
+      ? Object.values(this.profiles).findLast(p => p.fingerprintMode === record.fingerprintMode && p.userAgent)?.userAgent
+      : previous?.userAgent;
+    record.userAgent = resolveUserAgent(record, record.userAgent, priorAgent);
     validateProfile(record);
     if (record.proxy) validateInlineProxy(record.proxy);
     writeJSON(this.sequenceFile, { last: sequence });
@@ -129,7 +132,7 @@ class ProfileStore {
     next = completeHardware(next, old.fingerprintMode === 'hardware' ? { ...old, ...patch } : patch);
     if (old.fingerprintMode !== 'legacy' || next.fingerprintMode !== 'legacy') {
       const choice = next.fingerprintMode !== old.fingerprintMode && !Object.hasOwn(changes, 'userAgent') ? null : next.userAgent;
-      next.userAgent = resolveUserAgent(next, choice);
+      next.userAgent = resolveUserAgent(next, choice, choice === 'random-preset' ? old.userAgent : undefined);
       validateProfile(next);
     }
     if (next.proxy) {

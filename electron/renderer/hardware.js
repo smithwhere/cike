@@ -117,6 +117,7 @@ async function mountHardware(root, prefix, profile = {}) {
       !selectable || selectable.includes(value) || (mode === profile.fingerprintMode && value === profile.userAgent));
     const current = new Set(options.currentUserAgents?.[mode]);
     userAgent.replaceChildren(new Option('内核原生 UA', ''));
+    if (presets.length) userAgent.add(new Option('从可选 UA 预设随机', 'random-preset'));
     for (const [label, matches] of [['当前主版本测试', true], ['其他版本兼容性测试', false]]) {
       const entries = presets.filter(([, value]) => current.has(value) === matches);
       if (!entries.length) continue;
@@ -125,7 +126,8 @@ async function mountHardware(root, prefix, profile = {}) {
       for (const [name, value] of entries) group.append(new Option(name, value));
       userAgent.add(group);
     }
-    userAgent.value = presets.some(([, value]) => value === selectedUserAgents[mode]) ? selectedUserAgents[mode] : '';
+    const selectedAgent = selectedUserAgents[mode];
+    userAgent.value = [...userAgent.options].some(option => option.value === selectedAgent) ? selectedAgent : '';
   };
   userAgent.onchange = () => { selectedUserAgents[field('fingerprint-mode').value] = userAgent.value; };
   gpu.onchange = () => { selectedGpus[field('fingerprint-mode').value] = gpu.value; };

@@ -73,8 +73,10 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.deepEqual(await currentAgents.evaluateAll(options => options.map(option => [option.label, option.value])),
       currentUserAgents({ platform: p.platform, fingerprintMode: 'hardware' }));
     const visibleAgents = page.locator('#n-user-agent optgroup option');
+    const hardwareAgents = userAgentPresets(p.platform, { includeLegacy: false }).hardware.map(([, value]) => value);
     assert.deepEqual(new Set(await visibleAgents.evaluateAll(options => options.map(option => option.value))),
-      new Set(userAgentPresets(p.platform, { includeLegacy: false }).hardware.map(([, value]) => value)));
+      new Set(hardwareAgents));
+    if (hardwareAgents.length) await page.locator('#n-user-agent').selectOption('random-preset');
     await page.locator('#n-hardware-generate').click();
     await page.waitForFunction(() => document.querySelector('#n-fingerprint-seed')?.value.length === 32);
     await page.locator('#n-hardware-cpu').selectOption('4');
@@ -102,6 +104,7 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.equal(Object.keys(JSON.parse(fs.readFileSync(profiles.file))).length, 2);
     const created = Object.values(JSON.parse(fs.readFileSync(profiles.file))).find(record => record.id !== p.id);
     assert.equal(created.fingerprintMode, 'hardware'); assert.equal(created.hardwareConcurrency, 4); assert.equal(created.deviceMemory, 4);
+    if (hardwareAgents.length) assert.ok(hardwareAgents.includes(created.userAgent));
     assert.equal(created.gpuPreset, gpuPreset);
     assert.equal(created.locale, 'pt-BR'); assert.equal(created.timezone, 'America/Sao_Paulo');
     assert.equal(created.colorScheme, 'dark'); assert.equal(created.reducedMotion, 'reduce');

@@ -325,6 +325,24 @@ test('new profiles default to native UA, and explicit UA choices persist', () =>
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('manual preset UA draws include earlier versions and avoid repeating the previous choice', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-preset-ua-'));
+  t.mock.method(crypto, 'randomInt', size => size - 1);
+  try {
+    const store = new ProfileStore(dir);
+    const presets = userAgentPresets(HOST_PLATFORM, { includeLegacy: false });
+    for (const [fingerprintMode, entries] of Object.entries(presets)) {
+      const first = store.create({ fingerprintMode, userAgent: 'random-preset' });
+      const second = store.create({ fingerprintMode, userAgent: 'random-preset' });
+      const expected = entries.at(-1)?.[1] ?? null;
+      assert.equal(first.userAgent, expected);
+      assert.equal(second.userAgent, entries.at(-2)?.[1] ?? expected);
+      assert.equal(new ProfileStore(dir).get(second.id).userAgent, second.userAgent);
+      assert.equal(store.update(second.id, { userAgent: 'random-preset' }).userAgent, expected);
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('old incompatible GPU and audio settings can reopen with their environment data', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-migration-'));
   try {
