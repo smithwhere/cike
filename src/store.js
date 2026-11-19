@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const { HOST_PLATFORM, validateProfile } = require('./fingerprint');
 const { privateDirectory, readJSON, writeJSON, credentials } = require('./privatefiles');
 const { validateInlineProxy } = require('./proxyconfig');
-const { completeHardware, generateHardware } = require('./hardware');
+const { GPU_PRESETS, completeHardware, generateHardware, isGpuPresetAllowed } = require('./hardware');
 const { randomDisplay } = require('./display-presets');
 const { resolveUserAgent } = require('./user-agents');
 
@@ -32,6 +32,10 @@ class ProfileStore {
       if (p.id !== id) throw new Error('环境记录 ID 不一致');
       if (p.proxy) p.proxy.password = this.codec.decode(p.proxy.password);
       p.fingerprintMode ||= 'legacy';
+      if (['hardware', 'kernel'].includes(p.fingerprintMode)) {
+        p.audioNoise = false;
+        if (Object.hasOwn(GPU_PRESETS, p.gpuPreset) && !isGpuPresetAllowed(p.gpuPreset, p.fingerprintMode)) p.gpuPreset = 'native';
+      }
     }
     this.sequenceFile = path.join(dataDir, 'profile-sequence.json');
     const saved = readJSON(this.sequenceFile, { last: 0 }).last || 0;
@@ -39,7 +43,7 @@ class ProfileStore {
     for (const p of this.list()) {
       if (!Number.isSafeInteger(p.sequence) || p.sequence < 1) this.profiles[p.id].sequence = ++this.sequence;
     }
-    if (fs.existsSync(this.file)) this._save(); // Migrate permissions/encryption, not fingerprints.
+    if (fs.existsSync(this.file)) this._save();
   }
   _save() {
     const records = structuredClone(this.profiles);
@@ -50,7 +54,7 @@ class ProfileStore {
     if (spec.fingerprintMode === 'random') {
       const previous = Object.values(this.profiles).at(-1);
       spec = { ...spec, ...generateHardware(process.platform, process.arch, previous?.gpuPreset),
-        userAgent: 'random', display: randomDisplay(HOST_PLATFORM, previous?.display) };
+        userAgent: null, deviceMemory: null, display: randomDisplay(HOST_PLATFORM, previous?.display) };
     }
     const id = 'p_' + crypto.randomBytes(6).toString('hex');
     const now = new Date().toISOString();
@@ -86,6 +90,7 @@ class ProfileStore {
       const { hardwareConcurrency, deviceMemory, gpuPreset, canvasNoise, audioNoise } = DEFAULT_SPEC;
       Object.assign(next, { hardwareConcurrency, deviceMemory, gpuPreset, canvasNoise, audioNoise }, changes);
     }
+    if (next.fingerprintMode === 'kernel' && old.fingerprintMode !== 'kernel' && !Object.hasOwn(changes, 'gpuPreset')) next.gpuPreset = 'native';
     next = completeHardware(next, old.fingerprintMode === 'hardware' ? { ...old, ...patch } : patch);
     if (old.fingerprintMode !== 'legacy' || next.fingerprintMode !== 'legacy') {
       const choice = next.fingerprintMode !== old.fingerprintMode && !Object.hasOwn(changes, 'userAgent') ? null : next.userAgent;

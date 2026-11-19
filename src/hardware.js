@@ -59,19 +59,27 @@ const GPU_PRESETS = {
 };
 const RANDOM_CPU_VALUES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 32];
 const CPU_VALUES = [2, ...RANDOM_CPU_VALUES];
-const MEMORY_VALUES = [0.5, 1, 2, 4, 8, 16, 32, 48, 64, 96];
+const DESKTOP_MEMORY_VALUES = [2, 4, 8, 16, 32];
+const TEST_MEMORY_VALUES = [0.5, 1, 48, 64, 96];
 // Chromium 147 and later report up to 32 GiB on desktop.
 const RANDOM_MEMORY_VALUES = [4, 8, 16, 32];
 function hardwareOptions() {
-  return { cpus: CPU_VALUES, memories: MEMORY_VALUES,
-    gpus: Object.entries(GPU_PRESETS).map(([id, gpu]) => ({ id, name: gpu.name })) };
+  return { cpus: CPU_VALUES, memories: [...DESKTOP_MEMORY_VALUES, ...TEST_MEMORY_VALUES].sort((a, b) => a - b),
+    desktopMemories: DESKTOP_MEMORY_VALUES, testMemories: TEST_MEMORY_VALUES,
+    gpus: Object.entries(GPU_PRESETS).filter(([id]) => isGpuPresetAllowed(id, 'hardware'))
+      .map(([id, gpu]) => ({ id, name: gpu.name })) };
+}
+function isGpuPresetAllowed(id, mode, platform = process.platform, arch = process.arch) {
+  if (id === 'native') return true;
+  if (mode !== 'hardware' || !Object.hasOwn(GPU_PRESETS, id)) return false;
+  return id.startsWith('apple-') === (platform === 'darwin' && arch === 'arm64');
 }
 function generateHardware(platform = process.platform, arch = process.arch, previousGpu = null) {
   const choose = list => list[crypto.randomInt(list.length)];
-  const gpuChoices = Object.keys(GPU_PRESETS).filter(id => id !== 'native' && id !== previousGpu && id.startsWith('apple-') === (platform === 'darwin'));
+  const gpuChoices = Object.keys(GPU_PRESETS).filter(id => id !== 'native' && id !== previousGpu && isGpuPresetAllowed(id, 'hardware', platform, arch));
   const gpuPreset = platform === 'darwin' && arch !== 'arm64' ? 'native' : choose(gpuChoices);
   return { fingerprintMode: 'hardware', hardwareConcurrency: choose(RANDOM_CPU_VALUES), deviceMemory: choose(RANDOM_MEMORY_VALUES),
-    gpuPreset, canvasNoise: true, audioNoise: true, fingerprintSeed: crypto.randomBytes(16).toString('hex') };
+    gpuPreset, canvasNoise: true, audioNoise: false, fingerprintSeed: crypto.randomBytes(16).toString('hex') };
 }
 function completeHardware(profile, patch = {}) {
   if (profile.fingerprintMode === 'kernel') return { ...profile,
@@ -79,23 +87,25 @@ function completeHardware(profile, patch = {}) {
     gpuPreset: profile.gpuPreset || 'native', canvasNoise: false, audioNoise: false,
     fingerprintSeed: profile.fingerprintSeed || crypto.randomBytes(16).toString('hex') };
   if (profile.fingerprintMode !== 'hardware') return profile;
-  return { ...profile, hardwareConcurrency: profile.hardwareConcurrency ?? 8, deviceMemory: profile.deviceMemory ?? 8,
-    gpuPreset: profile.gpuPreset && profile.gpuPreset !== 'native' ? profile.gpuPreset : (Object.hasOwn(patch, 'gpuPreset') ? patch.gpuPreset : 'intel-uhd-630'),
+  return { ...profile, hardwareConcurrency: profile.hardwareConcurrency ?? 8, deviceMemory: profile.deviceMemory ?? null,
+    gpuPreset: profile.gpuPreset || 'native',
     fingerprintSeed: profile.fingerprintSeed || crypto.randomBytes(16).toString('hex'),
     canvasNoise: Object.hasOwn(patch, 'canvasNoise') ? patch.canvasNoise : true,
-    audioNoise: Object.hasOwn(patch, 'audioNoise') ? patch.audioNoise : true };
+    audioNoise: false };
 }
 function validateHardware(profile) {
   if (!CPU_VALUES.includes(profile.hardwareConcurrency)) throw Object.assign(new Error('请选择有效的 CPU 线程数'), { status: 400 });
-  if (!MEMORY_VALUES.includes(profile.deviceMemory)) throw Object.assign(new Error(`网页内存值须从 ${MEMORY_VALUES.join('、')} GB 中选择`), { status: 400 });
-  if (!Object.hasOwn(GPU_PRESETS, profile.gpuPreset)) throw Object.assign(new Error('请选择有效的显卡标识'), { status: 400 });
+  if (profile.deviceMemory != null && !DESKTOP_MEMORY_VALUES.includes(profile.deviceMemory) && !TEST_MEMORY_VALUES.includes(profile.deviceMemory)) {
+    throw Object.assign(new Error('请选择原生网页内存或有效的测试值'), { status: 400 });
+  }
+  if (!isGpuPresetAllowed(profile.gpuPreset, 'hardware')) throw Object.assign(new Error('请选择与当前平台匹配的显卡标识'), { status: 400 });
   if (!/^[a-f0-9]{32}$/.test(profile.fingerprintSeed || '')) throw Object.assign(new Error('指纹种子格式无效'), { status: 400 });
-  if (typeof profile.canvasNoise !== 'boolean' || typeof profile.audioNoise !== 'boolean') throw Object.assign(new Error('Canvas 和音频选项必须为布尔值'), { status: 400 });
+  if (typeof profile.canvasNoise !== 'boolean') throw Object.assign(new Error('Canvas 选项必须为布尔值'), { status: 400 });
 }
 function hardwareConfig(profile) {
   validateHardware(profile);
   return { hardwareConcurrency: profile.hardwareConcurrency, deviceMemory: profile.deviceMemory,
-    gpu: GPU_PRESETS[profile.gpuPreset], canvasNoise: profile.canvasNoise, audioNoise: profile.audioNoise,
+    gpu: GPU_PRESETS[profile.gpuPreset], canvasNoise: profile.canvasNoise,
     seed: [0, 8, 16, 24].map(offset => parseInt(profile.fingerprintSeed.slice(offset, offset + 8), 16) >>> 0) };
 }
-module.exports = { GPU_PRESETS, CPU_VALUES, hardwareOptions, generateHardware, completeHardware, validateHardware, hardwareConfig };
+module.exports = { GPU_PRESETS, CPU_VALUES, hardwareOptions, generateHardware, completeHardware, validateHardware, hardwareConfig, isGpuPresetAllowed };

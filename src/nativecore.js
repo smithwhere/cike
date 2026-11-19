@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { GPU_PRESETS, CPU_VALUES } = require('./hardware');
+const { CPU_VALUES, isGpuPresetAllowed } = require('./hardware');
 
 // Pin both the browser and its automation driver. No floating "latest" binary.
 const RELEASE = 'v158.0.1-beta.41';
@@ -30,7 +30,7 @@ function nativeExecutable(dir) {
 }
 function validateKernel(profile) {
   if (!CPU_VALUES.includes(profile.hardwareConcurrency)) throw Object.assign(new Error('请选择有效的 CPU 线程数'), { status: 400 });
-  if (!Object.hasOwn(GPU_PRESETS, profile.gpuPreset)) throw Object.assign(new Error('请选择有效的显卡标识'), { status: 400 });
+  if (!isGpuPresetAllowed(profile.gpuPreset, 'kernel')) throw Object.assign(new Error('Camoufox 使用原生显卡标识'), { status: 400 });
   if (profile.deviceMemory != null || profile.canvasNoise || profile.audioNoise) throw Object.assign(new Error('内核模式使用 Firefox 原生内存接口、Canvas 和音频，不支持脚本噪声'), { status: 400 });
 }
 function nativeConfig(profile) {
@@ -40,8 +40,6 @@ function nativeConfig(profile) {
   const locale = profile.locale === 'auto' ? Intl.DateTimeFormat().resolvedOptions().locale : profile.locale;
   config['locale:all'] = [...new Set([locale, locale.split('-')[0]])].join(', ');
   if (profile.timezone !== 'auto') config.timezone = profile.timezone;
-  const gpu = GPU_PRESETS[profile.gpuPreset];
-  if (gpu.vendor) { config['webGl:vendor'] = gpu.vendor; config['webGl:renderer'] = gpu.renderer; }
   return config;
 }
 function nativeEnvironment(config, preferences) {

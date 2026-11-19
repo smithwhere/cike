@@ -7,7 +7,7 @@ const path = require('path');
 const http = require('http');
 const { ProfileStore } = require('../src/store');
 const { BrowserManager } = require('../src/browser');
-const { GPU_PRESETS } = require('../src/hardware');
+const { GPU_PRESETS, hardwareOptions } = require('../src/hardware');
 
 async function observe() {
   const hash = data => { let value = 2166136261; for (const n of data) value = Math.imul(value ^ n, 16777619); return value >>> 0; };
@@ -31,19 +31,26 @@ async function observe() {
   const headers = await fetch(location.origin + '/headers').then(response => response.json());
   return { cores: navigator.hardwareConcurrency, memory: navigator.deviceMemory,
     canvas: a, repeated: b, exported: hash(copied.getImageData(0, 0, 64, 64).data), gpu, gpuPixels,
-    ua: navigator.userAgent, uaHeader: headers['user-agent'], memoryHeader: headers['device-memory'], memoryHint: headers['sec-ch-device-memory'] };
+    ua: navigator.userAgent, uaHeader: headers['user-agent'] };
 }
 async function audioValues() {
   const context = new OfflineAudioContext(1, 4096, 44100), oscillator = context.createOscillator(); oscillator.connect(context.destination); oscillator.start();
   const buffer = await context.startRendering(), first = Array.from(buffer.getChannelData(0)), second = Array.from(buffer.getChannelData(0)), copied = new Float32Array(buffer.length); buffer.copyFromChannel(copied, 0);
-  return { first, second, copied: Array.from(copied) };
+  const input = new AudioBuffer({ numberOfChannels: 1, length: 256, sampleRate: 44100 });
+  const samples = new Float32Array(input.length).fill(0.25);
+  input.copyToChannel(samples, 0);
+  const read = input.getChannelData(0);
+  const preserved = read.every(value => value === 0.25);
+  read[0] = 0.5;
+  input.copyFromChannel(samples, 0);
+  return { first, second, copied: Array.from(copied), preserved, writeVisible: samples[0] === 0.5 };
 }
 
 test('hardware simulation agrees at first script execution across pages, frames and all worker types, and survives restart', { timeout: 120000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-runtime-'));
   const source = `(${observe.toString()})()`;
   const server = http.createServer((request, response) => {
-    response.setHeader('Accept-CH', 'Device-Memory, Sec-CH-Device-Memory');
+    if (request.url === '/opt-in') response.setHeader('Accept-CH', 'Device-Memory, Sec-CH-Device-Memory');
     response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; worker-src 'self' blob:");
     if (request.url === '/headers') { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(request.headers)); }
     else if (request.url === '/worker.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(`const first=${source};first.then(value=>postMessage(value));`); }
@@ -55,18 +62,24 @@ test('hardware simulation agrees at first script execution across pages, frames 
   const origin = `http://127.0.0.1:${server.address().port}`;
   const store = new ProfileStore(dir), manager = new BrowserManager(store, null, null, { startPage: false, downloadsDirectory: path.join(dir, 'Downloads') });
   try {
-    const a = store.create({ fingerprintMode: 'hardware', hardwareConcurrency: 4, deviceMemory: 4, gpuPreset: 'intel-uhd-630', locale: 'en-US', timezone: 'UTC' });
-    const b = store.create({ fingerprintMode: 'hardware', hardwareConcurrency: 16, deviceMemory: 8, gpuPreset: 'nvidia-rtx-3060' });
+    const [, firstGpu, secondGpu] = hardwareOptions().gpus;
+    const a = store.create({ fingerprintMode: 'hardware', hardwareConcurrency: 4, deviceMemory: 48, gpuPreset: firstGpu.id, locale: 'en-US', timezone: 'UTC' });
+    const b = store.create({ fingerprintMode: 'hardware', hardwareConcurrency: 16, deviceMemory: 8, gpuPreset: secondGpu.id });
     assert.notEqual(a.fingerprintSeed, b.fingerprintSeed);
     await manager.open(a.id, { headless: true });
-    const context = manager.getContext(a.id), page = await context.newPage(); await page.goto(origin);
+    const context = manager.getContext(a.id), page = await context.newPage();
+    const initial = await (await page.goto(origin + '/headers')).json();
+    for (const name of ['device-memory', 'sec-ch-device-memory']) assert.equal(initial[name], undefined);
+    await page.goto(origin + '/opt-in');
+    const negotiated = await (await page.goto(origin + '/headers')).json();
+    for (const name of ['device-memory', 'sec-ch-device-memory']) assert.notEqual(negotiated[name], '48');
+    await page.goto(origin);
     const main = await page.evaluate(observe);
-    assert.equal(main.cores, 4); assert.equal(main.memory, 4);
+    assert.equal(main.cores, 4); assert.equal(main.memory, 48);
     assert.equal(main.uaHeader, main.ua);
     if (a.userAgent) assert.equal(main.ua, a.userAgent);
     assert.equal(main.canvas, main.repeated); assert.equal(main.canvas, main.exported);
     if (main.gpuPixels !== null) assert.equal(main.gpuPixels, main.canvas);
-    assert.equal(main.memoryHeader, '4'); assert.equal(main.memoryHint, '4');
     if (main.gpu) assert.equal(main.gpu.renderer, GPU_PRESETS[a.gpuPreset].renderer);
     assert.deepEqual(await page.frames()[1].evaluate(observe), main);
     for (const type of ['classic', 'module']) {
@@ -90,6 +103,7 @@ test('hardware simulation agrees at first script execution across pages, frames 
     assert.deepEqual(service, main);
     const audio = await page.evaluate(audioValues);
     assert.deepEqual(audio.first, audio.second); assert.deepEqual(audio.first, audio.copied);
+    assert.equal(audio.preserved, true); assert.equal(audio.writeVisible, true);
     const secondPage = await context.newPage();
     await secondPage.goto(origin);
     assert.equal((await secondPage.evaluate(observe)).canvas, main.canvas);
@@ -114,7 +128,8 @@ test('hardware simulation agrees at first script execution across pages, frames 
     await manager.open(b.id, { headless: true }); const pageB = await manager.getContext(b.id).newPage(); await pageB.goto(origin);
     const other = await pageB.evaluate(observe);
     assert.equal(other.cores, 16); assert.equal(other.memory, 8); assert.notEqual(other.canvas, main.canvas);
-    assert.notDeepEqual((await pageB.evaluate(audioValues)).first, audio.first);
+    const otherAudio = await pageB.evaluate(audioValues);
+    assert.equal(otherAudio.preserved, true); assert.equal(otherAudio.writeVisible, true);
     if (other.gpu) assert.equal(other.gpu.renderer, GPU_PRESETS[b.gpuPreset].renderer);
     await manager.close(a.id); await manager.open(a.id, { headless: true });
     const again = await manager.getContext(a.id).newPage(); await again.goto(origin);

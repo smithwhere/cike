@@ -47,9 +47,6 @@ function buildContextOptions(profile) {
   if (profile.locale !== 'auto') options.locale = profile.locale;
   if (profile.timezone !== 'auto') options.timezoneId = profile.timezone;
   if (profile.proxy) options.proxy = profile.proxy;
-  if (profile.fingerprintMode === 'hardware') options.extraHTTPHeaders = {
-    'Device-Memory': String(profile.deviceMemory), 'Sec-CH-Device-Memory': String(profile.deviceMemory),
-  };
   return { options, display };
 }
 function webrtcArgs(profile) {

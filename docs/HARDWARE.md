@@ -2,11 +2,11 @@
 
 ## 内核模式（新增）
 
-0.9.0 新增 **内核模拟（Camoufox / Firefox）**，用于避免 0.8.0 软件模拟产生的网页 API 替换痕迹。它使用固定版本的 Camoufox，在 Firefox 内部设置 CPU 线程数和可选 GPU 标识；不向网页注入硬件脚本，不替换 `navigator` getter、Canvas、WebGL 或音频函数。
+0.9.0 新增 **内核模拟（Camoufox / Firefox）**，用于避免 0.8.0 软件模拟产生的网页 API 替换痕迹。它使用固定版本的 Camoufox，在 Firefox 内部设置 CPU 线程数；不向网页注入硬件脚本，不替换 `navigator` getter、Canvas、WebGL 或音频函数。
 
 1. 进入“设置 → Camoufox 指纹内核”下载安装。下载约 1.3 GB，展开约 2.6 GB，安装前须关闭所有环境。
 2. 新建环境，或编辑环境并展开“指纹选项”，选择“内核模拟（Camoufox / Firefox）”。
-3. 设置 CPU 线程数。建议显卡标识保持“原生显卡”；可选显卡预设仍只改变标识，不能改变实际能力。
+3. 设置 CPU 线程数。显卡标识和图形能力来自 Firefox 内核。
 4. 保存并关闭、重新打开环境。
 
 **数据与兼容性：**Firefox 使用环境目录下独立的 `firefox` 子目录；原 Chromium 的 Cookie、站点数据保留，切回 Chromium 后继续使用。两种内核之间不会自动迁移登录状态。Firefox 不支持 Chrome 扩展、Chromium CDP 调试端口和所有仅限 Chrome 的网页功能。
@@ -19,7 +19,7 @@
 
 内核固定为 [Camoufox v158.0.1-beta.41](https://github.com/daijro/camoufox/releases/tag/v158.0.1-beta.41)，匹配 Playwright 1.62.0。下载来自该项目官方 Release，先校验固定 SHA-256，再验证版本与启动，完成后才切换可执行文件标记。内核源码、许可证与第三方字体声明由 Camoufox 项目及下载包提供。CIKE 不把第三方内核称作自行编译的内核。
 
-`test/kernel-runtime.test.js` 验证原生 getter、像素/音频、各类 Worker 的首次读数、请求头、重启、数据隔离与真实下载。`test/kernel-window.test.js` 验证 Windows 最大化、F11、新窗口及新环境继承；`scripts/check-native-site.js` 等待 who.1ms.dog 的完整检测后核对“环境被篡改”结果。检测结果仅代表对应版本、配置与测试环境，**不保证所有网站无法识别，也不保证以后版本的检测结果**。性能、驱动和其他底层信号仍可能与报告的 CPU/GPU 不同。
+`test/kernel-runtime.test.js` 验证原生 getter、像素/音频、各类 Worker 的首次读数、请求头、重启、数据隔离与真实下载。`test/kernel-window.test.js` 验证 Windows 最大化、F11、新窗口及新环境继承。性能、驱动和其他底层信号仍可能与报告的 CPU/GPU 不同。
 
 ## 软件层模式（0.8.0 保留）
 
@@ -30,27 +30,27 @@
 在“新建环境 → 指纹选项”或“编辑环境 → 指纹选项”中，把策略改为“硬件模拟（软件层）”。可设置：
 
 - CPU 线程数可选 2、4、6、8、10、12、14、16、18、20、22、24、28、32。随机生成从 4 线程起取值。22 线程规格参考 [Intel Core Ultra 7 155H](https://www.intel.com/content/www/us/en/products/sku/236847/intel-core-ultra-7-processor-155h-24m-cache-up-to-4-80-ghz/specifications.html)。
-- 网页内存随机生成使用 4、8、16 或 32 GiB。手动选择可用 0.5、1、2、4、8、16、32、48、64、96 GiB，其中 48、64、96 GiB 标为测试值。网页的 `deviceMemory` 是近似分档值。Chromium 从 147 起支持桌面 16 和 32 GiB，2026 年 10 月 Steam Windows 样本中这两档物理内存最常见。参见 [Chrome 147 发布说明](https://developer.chrome.com/release-notes/147#update_device_memory_api_limits) 和 [Steam 内存调查](https://store.steampowered.com/hwsurvey/ram?platform=pc)。
-- 显卡标识可选 46 种 Intel、NVIDIA、AMD 和 Apple 测试预设，也可沿用原生显卡。Apple Silicon 随机选取 Apple 预设，Intel Mac 使用原生显卡，Windows 和 Linux 随机选取非 Apple 预设。补充型号参考 [Steam 显卡调查](https://store.steampowered.com/hwsurvey/videocard) 和 [AMD Ryzen AI 9 HX 370 规格](https://www.amd.com/en/products/processors/laptop/ryzen/ai-300-series/amd-ryzen-ai-9-hx-370.html)。
-- User-Agent 默认使用内核原生值。主动选择随机分配时，从对应操作系统、内核及默认内核主版本的预设中选一次，重开时复用。Windows 分别提供 31 条 Chromium 和 32 条 Firefox 测试预设，macOS 分别提供 14 条 Chromium 和 17 条 Firefox 测试预设。Linux 使用内核原生 UA。历史兼容项参考 [Chrome 发布记录](https://chromereleases.googleblog.com/2026/09/)、[Firefox 发布记录](https://www.firefox.com/en-US/releases/) 和 [Firefox UA 格式](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent/Firefox)。
-- Canvas 读取与音频读取：按环境固定处理，或保留原生输出。
+- 网页内存默认由内核报告。软件层手动测试分为桌面常用的 2、4、8、16、32 GiB 和兼容性测试值 0.5、1、48、64、96 GiB。手动选择仅改变 JavaScript 的 `deviceMemory`，请求头由内核按站点协商。[Chrome 147 内存分档](https://developer.chrome.com/release-notes/147#update_device_memory_api_limits)
+- 软件层可以选原生显卡或当前平台的测试标识。Apple Silicon 提供 Apple 预设，Windows 和 Linux 提供 Intel、NVIDIA、AMD 预设。Intel Mac 自动创建时使用原生显卡。
+- UA 默认使用内核原生值。手动选项按当前主版本和历史版本分组，用于兼容性测试。检测页可核对实际内核版本、UA、平台及浏览器公开的 Client Hints。
+- Canvas 读取可选按环境固定处理或原生输出。音频使用内核原生读写。
 
 首次保存会生成固定的环境种子。更名、修改代理、关闭重开或重启 CIKE 不会自动更换种子。点击“生成另一组”可以重新生成参数和种子；修改后需要关闭并重新打开环境。
 
-桌面端新建环境默认在创建时随机分配。程序抽取一组 CPU、网页内存、显卡标识、当前内核的 UA 预设以及 Canvas／音频种子。Windows 同时抽取显示预设，连续创建时避开上一环境的显卡和显示预设。保存后从「编辑环境」可查看实际参数，也可在新建时选用原生一致、内核模拟或手动选取硬件参数。插件和字体由浏览器和系统提供。
+桌面端新建环境默认保存一组 CPU、适用的显卡标识及 Canvas 种子。Windows 同时抽取显示预设。选择「新建独立环境并打开」可一次保存并启动一份独立环境。自动创建时 UA、内存、音频、插件和字体采用原生读数。
 
-本地 HTTP API 可在创建环境时传入 `fingerprintMode: "random"`，省略时使用原生一致。切换策略后，Cookie 和站点数据由所选内核的环境目录保存。不同软件模拟环境即使配置了相同的 CPU 与显卡，也可通过各自的 Canvas／音频种子得到不同输出。
+本地 HTTP API 可在创建环境时传入 `fingerprintMode: "random"`，省略时使用原生一致。切换策略时 Cookie 和站点数据由所选内核的环境目录保存。升级后的软件层和内核模式使用原生音频，已有的跨平台或内核不兼容显卡预设会改用原生显卡。
 
 ## 对照两个窗口的读数
 
-先看环境检测页页首的环境编号。同一个环境里打开的新窗口会沿用这份配置。两个独立环境需要分别创建并启动。每个环境展开「当前网页读到的参数」，可核对正在使用的策略、Canvas 和音频的处理状态，以及以下本地读数。
+先看环境检测页页首的环境编号。同一环境里的新窗口沿用已保存的配置。展开「当前网页读到的参数」即可离线查看读数。点击「检测出口 IP」后，当前环境才查询公网出口及地区。
 
 | 项目 | 环境检测页显示 |
 | --- | --- |
-| WebGL | 内核报告的渲染器标识 |
-| Canvas / 音频 | 固定绘图及离线音频样本的摘要。原生输出时同机同内核可能相同 |
-| 插件 / 字体 | 浏览器报告的插件及可用字体样本。浏览器和系统相同时经常相同 |
-| RECTS | 检测页布局样本的 CSS 尺寸，以及独立列出的屏幕、视口和 DPR |
+| WebGL / WebGPU | 配置的显卡标识、当前绘制模式、网页读到的渲染器和适配器能力 |
+| Canvas / 音频 | 文本、渐变、半透明像素、重复读取及 PNG 往返，以及离线音频采样率与复制读数 |
+| 插件 / 字体 | 页面读取的插件、内嵌 PDF 支持、可访问的字体样本和中日韩字形尺寸 |
+| RECTS | 多行文字布局、屏幕可用区域、视口和 DPR |
 
 第三方检测页可以选择不同的输入和摘要算法。对照环境设置时以本地检测页的原始读数和固定样本为准。
 
@@ -60,11 +60,11 @@
 | --- | --- |
 | `navigator.hardwareConcurrency` | 返回所选线程数，覆盖页面和 Worker |
 | `navigator.deviceMemory` | 在浏览器原本提供该接口的上下文中返回所选值 |
-| 内存请求头 | 模拟模式发送相同的 `Device-Memory` 与 `Sec-CH-Device-Memory` 值，避免和 JavaScript 读数冲突；该模式会主动发送这些头部 |
+| 内存请求头 | 由内核处理 Client Hints 协商 |
 | WebGL / WebGL2 | 替换可用的未屏蔽厂商、渲染器标识；处理 RGBA / UNSIGNED_BYTE 的像素读回 |
 | WebGPU | 在接口和适配器可用时替换适配器信息标识，不创建虚构适配器 |
 | Canvas / OffscreenCanvas | 对不透明 8 位像素采用按种子固定的最低位处理，覆盖常用读取和 PNG 导出；重复读取不累加变化 |
-| AudioBuffer | 对有限、非零 PCM 样本进行固定的最低位处理；协调 `getChannelData`、`copyFromChannel`、`copyToChannel` |
+| AudioBuffer | 使用内核原生读写；启动页只计算本地离线样本 |
 | Worker | 在初始脚本执行前安装，包括专用、模块、嵌套、Blob、SharedWorker 与 ServiceWorker |
 
 Worker 使用原始 URL 和加载方式，保留 CSP、同源规则与浏览器沙盒。启动不额外开放远程调试端口。跨环境的浏览器进程与数据目录继续独立。
@@ -83,4 +83,4 @@ Worker 使用原始 URL 和加载方式，保留 CSP、同源规则与浏览器�
 
 Worker 初始化适配当前锁定的 Playwright **1.64.1**。它在 Playwright 恢复 Worker 前排入配置，避免只在 Worker 事件回调中修改而错过首次执行。升级 Playwright 必须同步验证适配器；无法初始化时关闭该环境，不静默降级为部分模拟。
 
-`test/hardware-runtime.test.js` 验证页面/iframe/各类 Worker 的首次读数、内存头部、Canvas 重复读取及导出一致性、环境间差异、音频读取一致性和重启稳定性。`test/desktop.test.js` 验证界面创建和实际打开模拟环境；原生模式与原有窗口、代理、存储回归继续执行。
+`test/hardware-runtime.test.js` 验证页面、iframe 与 Worker 的读数、首个请求及协商后的内存头、Canvas 导出、原生音频读写和重启稳定性。`test/environments.test.js` 验证检测页开启后可在零外部请求的情况下完成本地读数。

@@ -27,10 +27,8 @@ function patchProtocol(prototype) {
     // Chromium processes these queued commands before its first site script.
     const enabled = Reflect.apply(send, this, ['Runtime.enable']);
     const installed = Reflect.apply(send, this, ['Runtime.evaluate', { expression: record.script, disableBreaks: true }]);
-    const network = Reflect.apply(send, this, ['Network.enable']);
-    const headers = Reflect.apply(send, this, ['Network.setExtraHTTPHeaders', { headers: record.headers }]);
     const resumed = Reflect.apply(send, this, [method, params]);
-    return Promise.all([enabled, installed, network, headers, resumed]).then(([, result, , , response]) => {
+    return Promise.all([enabled, installed, resumed]).then(([, result, response]) => {
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'Worker hardware configuration failed');
       return response;
     }).catch(error => {
@@ -44,7 +42,7 @@ function patchProtocol(prototype) {
   prototype.detach = function (...args) {
     const record = records.get(this._connection);
     // Playwright does not expose SharedWorker objects and normally detaches
-    // immediately. Keep its session so memory hints remain applied to fetch.
+    // immediately. Resume it through the same initialization used by workers.
     if (record && record.targets.get(this._sessionId) === 'shared_worker') return this.send('Runtime.runIfWaitingForDebugger');
     return Reflect.apply(detach, this, args);
   };
@@ -62,7 +60,7 @@ async function installHardwareContext(context, profile) {
     throw new Error('硬件模拟与当前浏览器控制版本不兼容，请切换原生模式');
   }
   const config = hardwareConfig(profile), script = hardwareScript(config);
-  const record = { script, headers: { 'Device-Memory': String(config.deviceMemory), 'Sec-CH-Device-Memory': String(config.deviceMemory) },
+  const record = { script,
     targets: new Map(), initialized: new WeakSet(), closed: false,
     failed(error) {
       if (record.closed) return;

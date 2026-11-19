@@ -230,7 +230,7 @@ class BrowserManager {
         if (this.sessions.get(id) !== session) return;
         session.network = { ...session.network, exitIp: ip, checkedAt: new Date().toISOString() };
         this.store.recordNetwork(id, session.network);
-      });
+      }, graphicsMode);
       checkCancelled();
       if (graphicsFallback) this.settings?.rememberCamoufoxSoftware();
       this.store.recordOpened(id, session.network);

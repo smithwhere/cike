@@ -12,12 +12,16 @@ function choicesFor(profile) {
   return ['hardware', 'kernel'].includes(fingerprintMode) ? userAgentPresets(platform)[fingerprintMode] : [];
 }
 
-function resolveUserAgent(profile, choice) {
-  if (choice !== 'random') return choice === '' ? null : choice ?? null;
+function currentUserAgents(profile) {
   const version = profile.fingerprintMode === 'kernel' ? require('./nativecore').BUILD : CHROMIUM_VERSION;
   const major = version.split('.')[0];
   const agent = profile.fingerprintMode === 'kernel' ? 'Firefox' : 'Chrome';
-  const choices = choicesFor(profile).filter(([, value]) => value.includes(`${agent}/${major}.`));
+  return choicesFor(profile).filter(([, value]) => value.includes(`${agent}/${major}.`));
+}
+
+function resolveUserAgent(profile, choice) {
+  if (choice !== 'random') return choice === '' ? null : choice ?? null;
+  const choices = currentUserAgents(profile);
   return choices.length ? choices[crypto.randomInt(choices.length)][1] : null;
 }
 
@@ -25,4 +29,4 @@ function isUserAgentAllowed(profile) {
   return profile.userAgent == null || profile.userAgent === '' || choicesFor(profile).some(([, value]) => value === profile.userAgent);
 }
 
-module.exports = { userAgentPresets, resolveUserAgent, isUserAgentAllowed };
+module.exports = { userAgentPresets, currentUserAgents, resolveUserAgent, isUserAgentAllowed };

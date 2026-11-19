@@ -72,7 +72,8 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.waitForFunction(() => document.querySelector('#n-fingerprint-seed')?.value.length === 32);
     await page.locator('#n-hardware-cpu').selectOption('4');
     await page.locator('#n-hardware-memory').selectOption('4');
-    await page.locator('#n-hardware-gpu').selectOption('nvidia-rtx-4070');
+    const gpuPreset = process.platform === 'darwin' && process.arch === 'arm64' ? 'apple-m4' : 'nvidia-rtx-4070';
+    await page.locator('#n-hardware-gpu').selectOption(gpuPreset);
     await page.locator('#n-locale').selectOption('pt-BR');
     await page.locator('#n-tz').selectOption('America/Sao_Paulo');
     await page.locator('#n-color-scheme').selectOption('dark');
@@ -94,7 +95,7 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.equal(Object.keys(JSON.parse(fs.readFileSync(profiles.file))).length, 2);
     const created = Object.values(JSON.parse(fs.readFileSync(profiles.file))).find(record => record.id !== p.id);
     assert.equal(created.fingerprintMode, 'hardware'); assert.equal(created.hardwareConcurrency, 4); assert.equal(created.deviceMemory, 4);
-    assert.equal(created.gpuPreset, 'nvidia-rtx-4070');
+    assert.equal(created.gpuPreset, gpuPreset);
     assert.equal(created.locale, 'pt-BR'); assert.equal(created.timezone, 'America/Sao_Paulo');
     assert.equal(created.colorScheme, 'dark'); assert.equal(created.reducedMotion, 'reduce');
     assert.equal(created.contrast, 'more'); assert.equal(created.forcedColors, 'active');
@@ -220,7 +221,8 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.equal(await page.locator('#n-software-noise').isVisible(), false);
     assert.equal(await page.locator('#n-software-memory').isVisible(), false);
     await page.locator('#n-hardware-cpu').selectOption('4');
-    await page.locator('#n-hardware-gpu').selectOption('native');
+    assert.equal(await page.locator('#n-hardware-gpu option').count(), 1);
+    assert.equal(await page.locator('#n-hardware-gpu').inputValue(), 'native');
     const kernelCreated = page.waitForResponse(response => response.url().endsWith('/api/profiles') && response.request().method() === 'POST');
     await page.locator('#n-save').click();
     assert.equal((await kernelCreated).status(), 200);
@@ -245,13 +247,25 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       await page.getByRole('button', { name: '新建环境', exact: true }).click();
       assert.equal(await page.locator('#n-fingerprint-mode').inputValue(), 'random');
       const created = page.waitForResponse(response => response.url().endsWith('/api/profiles') && response.request().method() === 'POST');
-      await page.locator('#n-save').click();
+      if (process.env.LFB_CHROMIUM_EXECUTABLE) {
+        await page.getByRole('button', { name: '新建独立环境并打开', exact: true }).click();
+      } else {
+        await page.locator('#n-save').click();
+      }
       const response = await created;
       assert.equal(response.status(), 200);
-      generated.push((await response.json()).profile);
+      const fresh = (await response.json()).profile;
+      generated.push(fresh);
+      if (process.env.LFB_CHROMIUM_EXECUTABLE) {
+        const card = page.locator('.env-card').filter({ has: page.getByText(String(fresh.sequence), { exact: true }) });
+        await card.getByText('运行中', { exact: true }).waitFor({ timeout: 30000 });
+        await card.locator('[data-act="close"]').click();
+        await card.getByText('已关闭', { exact: true }).waitFor();
+      }
       await page.locator('#page-profiles').waitFor({ state: 'visible' });
     }
-    assert.ok(generated.every(profile => profile.fingerprintMode === 'hardware'));
+    assert.ok(generated.every(profile => profile.fingerprintMode === 'hardware' && profile.userAgent === null && profile.deviceMemory === null));
+    assert.notEqual(generated[0].id, generated[1].id);
     assert.notEqual(generated[0].fingerprintSeed, generated[1].fingerprintSeed);
     if (process.platform === 'win32') {
       assert.notEqual(generated[0].gpuPreset, generated[1].gpuPreset);

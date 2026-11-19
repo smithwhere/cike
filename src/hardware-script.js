@@ -16,8 +16,8 @@ function installHardware(config) {
     }
   };
   defineGetter(navigatorPrototype, 'hardwareConcurrency', function getHardwareConcurrency() { return config.hardwareConcurrency; });
-  defineGetter(navigatorPrototype, 'deviceMemory', function getDeviceMemory() { return config.deviceMemory; });
-  if (navigator.hardwareConcurrency !== config.hardwareConcurrency || ('deviceMemory' in navigator && navigator.deviceMemory !== config.deviceMemory)) throw new Error('Hardware navigator configuration failed');
+  if (config.deviceMemory != null) defineGetter(navigatorPrototype, 'deviceMemory', function getDeviceMemory() { return config.deviceMemory; });
+  if (navigator.hardwareConcurrency !== config.hardwareConcurrency || (config.deviceMemory != null && 'deviceMemory' in navigator && navigator.deviceMemory !== config.deviceMemory)) throw new Error('Hardware navigator configuration failed');
   const mix = value => { value = Math.imul(value ^ (value >>> 16), 0x45d9f3b); value = Math.imul(value ^ (value >>> 16), 0x45d9f3b); return (value ^ (value >>> 16)) >>> 0; };
   const hashAt = (x, y, width, height) => mix((config.seed[0] ^ Math.imul(x + 1, 73856093)) + Math.imul(config.seed[1] ^ y, 19349663) ^ mix(config.seed[2] + width + x) ^ config.seed[3] ^ height);
   const pixels = (data, width, height, canvasWidth, canvasHeight, x = 0, y = 0, flip = false, stride = width * 4) => {
@@ -108,31 +108,6 @@ function installHardware(config) {
     for (const [name, value] of Object.entries({ vendor: config.gpu.webgpuVendor, architecture: '', device: '', description: config.gpu.name })) {
       defineGetter(GPUAdapterInfo.prototype, name, function getAdapterInformation() { return value; });
     }
-  }
-  if (config.audioNoise && globalThis.AudioBuffer) {
-    const original = AudioBuffer.prototype.getChannelData, changed = new WeakMap();
-    const prepare = (buffer, channel) => {
-      const data = Reflect.apply(original, buffer, [channel]);
-      let channels = changed.get(buffer); if (!channels) { channels = new Set(); changed.set(buffer, channels); }
-      if (!channels.has(channel)) {
-        const bits = new Uint32Array(data.buffer, data.byteOffset, data.length);
-        for (let index = 0; index < data.length; index++) {
-          const hash = hashAt(index, channel, buffer.length, buffer.sampleRate);
-          if (data[index] && Number.isFinite(data[index]) && hash % 16 === 0) bits[index] = (bits[index] & 0xfffffffe) | ((hash >>> 8) & 1);
-        }
-        channels.add(channel);
-      }
-      return data;
-    };
-    AudioBuffer.prototype.getChannelData = function getChannelData(channel) { return prepare(this, channel); };
-    const copy = AudioBuffer.prototype.copyFromChannel;
-    AudioBuffer.prototype.copyFromChannel = function (...args) { prepare(this, args[1]); return Reflect.apply(copy, this, args); };
-    const write = AudioBuffer.prototype.copyToChannel;
-    AudioBuffer.prototype.copyToChannel = function (...args) {
-      const result = Reflect.apply(write, this, args);
-      changed.get(this)?.delete(args[1]);
-      return result;
-    };
   }
 }
 

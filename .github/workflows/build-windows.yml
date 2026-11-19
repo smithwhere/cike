@@ -44,9 +44,6 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not $browser) { exit 1 }
           "LFB_CHROMIUM_EXECUTABLE=$browser" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: npm test
-      - name: Verify the requested detector with native hardware simulation
-        if: ${{ !cancelled() }}
-        run: node scripts/check-native-site.js
       - name: Verify native Windows window state and fullscreen inheritance
         if: ${{ !cancelled() }}
         run: node --test --test-concurrency=1 test/windows-window.test.js

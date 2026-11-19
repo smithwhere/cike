@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { ProfileStore } = require('../src/store');
 const { HOST_PLATFORM, buildContextOptions } = require('../src/fingerprint');
-const { generateHardware, hardwareConfig, hardwareOptions } = require('../src/hardware');
+const { GPU_PRESETS, generateHardware, hardwareConfig, hardwareOptions, isGpuPresetAllowed } = require('../src/hardware');
 const { installHardwareContext } = require('../src/hardware-runtime');
 const { nativeConfig } = require('../src/nativecore');
 const { userAgentPresets, resolveUserAgent, isUserAgentAllowed } = require('../src/user-agents');
@@ -49,6 +49,7 @@ test('worker startup rejects genuine errors and preserves the environment for di
     }
     createChildSession(id) { return new Session(this._connection, id); }
     async send(method) {
+      assert.ok(!method.startsWith('Network.'), 'worker must use native request headers');
       if (method === 'Runtime.enable') throw this.failure;
       return {};
     }
@@ -95,23 +96,26 @@ test('random generation uses every supported CPU and memory choice once per pool
 });
 
 test('simulated GPU presets remain selectable, with platform-specific random pools', (t) => {
-  const presets = hardwareOptions().gpus.filter(({ id }) => id !== 'native');
+  const presets = Object.keys(GPU_PRESETS).filter(id => id !== 'native');
   assert.equal(presets.length, 46);
   let gpuIndex = 0;
   const poolSizes = new Set([5, presets.length - 5]);
   t.mock.method(crypto, 'randomInt', size => poolSizes.has(size) ? gpuIndex : 0);
   for (const [platform, arch] of [['win32', 'x64'], ['linux', 'x64'], ['darwin', 'arm64']]) {
-    const pool = presets.filter(({ id }) => id.startsWith('apple-') === (platform === 'darwin'));
-    for (const [index, preset] of pool.entries()) {
+    const pool = presets.filter(id => id.startsWith('apple-') === (platform === 'darwin'));
+    for (const [index, id] of pool.entries()) {
       gpuIndex = index;
-      assert.equal(generateHardware(platform, arch).gpuPreset, preset.id);
+      assert.equal(generateHardware(platform, arch).gpuPreset, id);
+      assert.equal(isGpuPresetAllowed(id, 'hardware', platform, arch), true);
+      assert.equal(isGpuPresetAllowed(id, 'kernel', platform, arch), false);
     }
   }
   assert.equal(generateHardware('darwin', 'x64').gpuPreset, 'native');
-  gpuIndex = 0;
-  const { gpu } = hardwareConfig({ ...generateHardware(), gpuPreset: 'apple-m4-pro' });
-  assert.equal(gpu.renderer, 'ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)');
-  assert.equal(gpu.webgpuVendor, 'apple');
+  assert.equal(isGpuPresetAllowed('apple-m4-pro', 'hardware', 'win32', 'x64'), false);
+  assert.equal(isGpuPresetAllowed('apple-m4-pro', 'hardware', 'linux', 'x64'), false);
+  assert.equal(isGpuPresetAllowed('intel-uhd', 'hardware', 'darwin', 'arm64'), false);
+  assert.deepEqual(hardwareOptions().gpus.map(({ id }) => id), ['native', ...presets.filter(id =>
+    id.startsWith('apple-') === (process.platform === 'darwin' && process.arch === 'arm64'))]);
 });
 
 test('User-Agent presets are unique and random selection is scoped to the platform and engine', (t) => {
@@ -179,7 +183,10 @@ test('two automatic creations persist fresh settings and keep manual creation av
     for (const profile of [first, second]) {
       assert.equal(profile.fingerprintMode, 'hardware');
       assert.equal(profile.canvasNoise, true);
-      assert.equal(profile.audioNoise, true);
+      assert.equal(profile.audioNoise, false);
+      assert.equal(profile.deviceMemory, null);
+      assert.equal(profile.userAgent, null);
+      assert.equal(buildContextOptions(profile).options.extraHTTPHeaders, undefined);
       assert.match(profile.fingerprintSeed, /^[a-f0-9]{32}$/);
       assert.deepEqual(reopened.get(profile.id), profile);
     }
@@ -220,12 +227,37 @@ test('new profiles default to native UA, and explicit UA choices persist', () =>
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('old incompatible GPU and audio settings can reopen with their environment data', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-migration-'));
+  try {
+    const store = new ProfileStore(dir);
+    const software = store.create({ fingerprintMode: 'hardware', deviceMemory: 48 });
+    const kernel = store.create({ fingerprintMode: 'kernel' });
+    const incompatible = process.platform === 'darwin' && process.arch === 'arm64' ? 'intel-uhd' : 'apple-m1';
+    assert.throws(() => store.update(software.id, { gpuPreset: incompatible }), /显卡/);
+    assert.throws(() => store.update(kernel.id, { gpuPreset: 'nvidia-rtx-3060' }), /显卡/);
+    const records = JSON.parse(fs.readFileSync(store.file));
+    Object.assign(records[software.id], { gpuPreset: incompatible, audioNoise: true });
+    Object.assign(records[kernel.id], { gpuPreset: 'nvidia-rtx-3060', audioNoise: true });
+    fs.mkdirSync(store.profileDir(software.id));
+    const cookie = path.join(store.profileDir(software.id), 'cookie-fixture');
+    fs.writeFileSync(cookie, 'kept');
+    fs.writeFileSync(store.file, JSON.stringify(records));
+    const reopened = new ProfileStore(dir);
+    assert.deepEqual(reopened.get(software.id), software);
+    assert.deepEqual(reopened.get(kernel.id), kernel);
+    assert.equal(fs.readFileSync(cookie, 'utf8'), 'kept');
+    assert.equal(buildContextOptions(reopened.get(software.id)).options.extraHTTPHeaders, undefined);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('switching a simulated profile to native clears inherited hardware overrides', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-native-switch-'));
   try {
     const store = new ProfileStore(dir);
     for (const fingerprintMode of ['hardware', 'kernel']) {
-      const profile = store.create({ fingerprintMode, hardwareConcurrency: 4, gpuPreset: 'nvidia-rtx-3060', locale: 'zh-CN' });
+      const gpuPreset = fingerprintMode === 'kernel' ? 'native' : hardwareOptions().gpus[1].id;
+      const profile = store.create({ fingerprintMode, hardwareConcurrency: 4, gpuPreset, locale: 'zh-CN' });
       const edited = store.update(profile.id, { hardwareConcurrency: 6 });
       assert.equal(edited.hardwareConcurrency, 6);
       assert.equal(edited.fingerprintSeed, profile.fingerprintSeed);

@@ -85,8 +85,13 @@ function initNewPage() {
     autoCheckNewProxy();
   };
   document.getElementById('n-proxy-check').onclick = () => autoCheckNewProxy(true);
-  save.onclick = () => saveNewProfile(false);
-  saveAndOpen.onclick = () => saveNewProfile(true);
+  const submit = async openAfter => {
+    save.disabled = saveAndOpen.disabled = true;
+    try { await saveNewProfile(openAfter); }
+    finally { save.disabled = saveAndOpen.disabled = false; }
+  };
+  save.onclick = () => submit(false);
+  saveAndOpen.onclick = () => submit(true);
 }
 
 function refreshNewProxySelect() {
@@ -175,12 +180,8 @@ async function saveNewProfile(openAfter = false) {
     await loadProfiles();
     document.getElementById('n-group').value = '';
     document.getElementById('n-proxy-result').textContent = '';
-    if (openAfter && r.profile?.id) {
-      // Open with proxy check
-      await openProfileWithCheck(r.profile.id);
-    } else {
-      showPage('profiles');
-    }
+    showPage('profiles');
+    if (openAfter && r.profile?.id) await openProfileWithCheck(r.profile.id);
   } catch (err) {
     toast('创建失败：' + err.message, true);
   }

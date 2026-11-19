@@ -3,14 +3,17 @@ const fs = require('fs');
 const path = require('path');
 const net = require('net');
 const ORIGIN = 'https://start.cike.invalid';
-async function openStartPage(context, profile, network, onResult) {
+async function openStartPage(context, profile, network, onResult, graphicsMode) {
   const page = context.pages()[0] || await context.newPage();
   const root = path.join(__dirname, '..', 'electron', 'start');
   const software = profile.fingerprintMode === 'hardware';
   const config = {
     name: profile.name, sequence: profile.sequence, proxy: network.route === 'proxy', expectedIp: network.exitIp,
     mode: profile.fingerprintMode, canvasProcessing: software && profile.canvasNoise === true,
-    audioProcessing: software && profile.audioNoise === true,
+    browserVersion: context.browser()?.version() || null,
+    gpuPreset: require('./hardware').GPU_PRESETS[profile.gpuPreset]?.name || '原生显卡',
+    graphicsMode: graphicsMode ?? null,
+    restrictWebRTC: network.route === 'proxy' || profile.webrtc !== 'default',
   };
   const assets = { '/': ['index.html', 'text/html'], '/start.js': ['start.js', 'text/javascript'], '/start.css': ['start.css', 'text/css'] };
   // A reserved .invalid origin is fulfilled only inside this page. No local

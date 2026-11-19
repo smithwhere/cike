@@ -1,23 +1,30 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CIKE 环境检测</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/start.css"></head><body><main><header><span class="badge" id="number"></span><div><p class="eyebrow">CIKE · 环境检测</p><h1 id="name"></h1></div><button id="refresh">重新检测</button></header><section class="hero"><p>当前浏览器出口 IP</p><h2 id="ip">检测中…</h2><p id="status" role="status">通过当前环境的网络连接检测</p></section><section class="grid"><article><label>连接方式</label><strong id="route"></strong></article><article><label>IP 所在地区</label><strong id="region">等待检测</strong></article><article><label>浏览器时区</label><strong id="timezone"></strong></article><article><label>出口时区</label><strong id="exit-timezone">等待检测</strong></article><article><label>浏览器语言</label><strong id="language"></strong></article><article><label>网络运营商</label><strong id="isp">等待检测</strong></article></section><p class="notice" id="match"></p>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CIKE 环境检测</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/start.css"></head><body><main><header><span class="badge" id="number"></span><div><p class="eyebrow">CIKE · 环境检测</p><h1 id="name"></h1></div><button id="refresh">检测出口 IP</button></header><section class="hero"><p>当前浏览器出口 IP</p><h2 id="ip">尚未检测</h2><p id="status" role="status">点击按钮后通过当前环境检测出口</p></section><section class="grid"><article><label>连接方式</label><strong id="route"></strong></article><article><label>IP 所在地区</label><strong id="region">等待检测</strong></article><article><label>浏览器时区</label><strong id="timezone"></strong></article><article><label>出口时区</label><strong id="exit-timezone">等待检测</strong></article><article><label>浏览器语言</label><strong id="language"></strong></article><article><label>网络运营商</label><strong id="isp">等待检测</strong></article></section><p class="notice" id="match"></p>
   <details id="browser-values" class="browser-values">
     <summary>当前网页读到的参数</summary>
     <p id="readout-mode"></p>
     <p>同一环境的窗口共享一份配置。比较不同环境时，先核对页首环境编号。Canvas 和音频摘要来自本页的固定测试样本。定位权限仅反映此页。</p>
     <section class="grid">
       <article class="wide"><label>User-Agent</label><strong id="readout-ua"></strong></article>
-      <article><label>CSS 屏幕 / 视口 / DPR</label><strong id="readout-display"></strong></article>
-      <article><label>布局样本尺寸（RECTS）</label><strong id="readout-rects"></strong></article>
+      <article><label>CSS 屏幕 / 可用区域 / DPR</label><strong id="readout-display"></strong></article>
+      <article><label>窗口 / 视口 / 手势缩放</label><strong id="readout-viewport"></strong></article>
+      <article class="wide"><label>多行布局样本（RECTS）</label><div class="rect-fixture" aria-hidden="true"><span id="rect-fixture">浏览器布局测试 · Browser layout sample · 多行文本</span></div><strong id="readout-rects"></strong></article>
+      <article class="wide"><label>内核版本 / 平台 / Client Hints</label><strong id="readout-client"></strong></article>
       <article><label>语言列表</label><strong id="readout-languages"></strong></article>
       <article><label>CPU 线程 / 网页内存</label><strong id="readout-hardware"></strong></article>
       <article><label>网页外观 / 动画 / 强制配色 / 对比度</label><strong id="readout-appearance"></strong></article>
-      <article class="wide"><label>WebGL 渲染器 / WebGPU 接口</label><strong id="readout-graphics"></strong></article>
+      <article class="wide"><label>配置的显卡标识 / 当前绘制模式</label><strong id="readout-graphics-mode"></strong></article>
+      <article class="wide"><label>网页读到的 WebGL 标识 / 能力</label><strong id="readout-graphics"></strong></article>
+      <article class="wide"><label>WebGPU 适配器 / 能力</label><strong id="readout-webgpu">检测中…</strong></article>
       <article><label>Canvas 2D 样本</label><strong id="readout-canvas">检测中…</strong></article>
-      <article><label>离线音频样本</label><strong id="readout-audio">检测中…</strong></article>
+      <article><label>离线样本采样率与摘要</label><strong id="readout-audio">检测中…</strong></article>
       <article><label>浏览器报告的插件</label><strong id="readout-plugins"></strong></article>
+      <article><label>内嵌 PDF 查看器</label><strong id="readout-pdf"></strong></article>
       <article><label>常见本机字体样本</label><strong id="readout-fonts">检测中…</strong></article>
+      <article><label>中日韩字形回退尺寸</label><strong id="readout-cjk"></strong></article>
       <article><label>浏览器报告支持的编解码格式</label><strong id="readout-codecs"></strong></article>
       <article><label>连接估计</label><strong id="readout-network"></strong></article>
+      <article><label>WebRTC 策略</label><strong id="readout-webrtc"></strong></article>
       <article><label>此页的定位权限</label><strong id="readout-location">检测中…</strong></article>
     </section>
   </details>
-  <footer>检测请求经当前环境访问 api.ipify.org 和 ipwho.is。结果反映当前出口，不代表所有网络路径都没有泄漏。可直接在地址栏输入网址继续使用。</footer></main><script src="/config.js"></script><script src="/start.js"></script></body></html>
+  <footer>本地参数检测可离线运行。点击「检测出口 IP」后，当前环境会访问 api.ipify.org 和 ipwho.is。</footer></main><script src="/config.js"></script><script src="/start.js"></script></body></html>
