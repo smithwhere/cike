@@ -32,6 +32,7 @@
     "electron": "44.10.0",
     "electron-packager": "npm:@electron/packager@20.3.0",
     "png-to-ico": "3.0.2",
+    "pngjs": "7.0.0",
     "yazl": "3.3.1"
   }
 }

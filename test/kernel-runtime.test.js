@@ -114,3 +114,81 @@ test('native core changes hardware without replacing APIs, agrees across workers
       await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 6, retryDelay: 300 });
     }
   });
+
+function drawPrivacySample(canvas) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const gradient = ctx.createLinearGradient(0, 0, 64, 64);
+  gradient.addColorStop(0, '#125493');
+  gradient.addColorStop(1, '#ebaf31');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+  return btoa(String.fromCharCode(...ctx.getImageData(0, 0, 64, 64).data));
+}
+
+test('Camoufox partitions Canvas pixel readback by top-level site when enabled', {
+  skip: !process.env.CIKE_CAMOUFOX_EXECUTABLE, timeout: 120000,
+}, async t => {
+  const { PNG } = require('pngjs');
+  const { createHash } = require('node:crypto');
+  const digest = pixels => createHash('sha256').update(pixels).digest('hex');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-canvas-'));
+  const store = new ProfileStore(dir);
+  const manager = new BrowserManager(store, null, null, { startPage: false, downloadsDirectory: path.join(dir, 'Downloads') });
+  const profile = store.create({ fingerprintMode: 'kernel', timezone: 'UTC' });
+  const embed = 'https://embed.test/';
+  async function measure() {
+    await manager.open(profile.id, { headless: true });
+    const context = manager.getContext(profile.id);
+    await context.route('https://*.test/**', route => route.fulfill({
+      contentType: 'text/html',
+      body: route.request().url() === embed ? '<!doctype html><title>Canvas</title>' : '<!doctype html><iframe src="https://embed.test/"></iframe>',
+    }));
+    const page = await context.newPage();
+    const results = [];
+    for (const site of ['first', 'second', 'first']) {
+      await page.goto('https://' + site + '.test/');
+      const frame = page.frames().find(item => item.url() === embed);
+      assert.ok(frame, 'third-party frame loaded');
+      const canvas = await frame.evaluateHandle(() => {
+        const element = document.createElement('canvas');
+        element.width = element.height = 64;
+        return element;
+      });
+      const raw = await canvas.evaluate(drawPrivacySample);
+      const png = await canvas.evaluate(element => element.toDataURL('image/png').split(',')[1]);
+      const worker = await frame.evaluate(async source => {
+        const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+        const worker = new Worker(url);
+        try {
+          return await new Promise((resolve, reject) => {
+            worker.onmessage = event => resolve(event.data);
+            worker.onerror = event => reject(new Error(event.message));
+          });
+        } finally { worker.terminate(); URL.revokeObjectURL(url); }
+      }, 'postMessage((' + drawPrivacySample.toString() + ')(new OffscreenCanvas(64, 64)))');
+      results.push({
+        raw: digest(Buffer.from(raw, 'base64')),
+        png: digest(PNG.sync.read(Buffer.from(png, 'base64')).data),
+        worker: digest(Buffer.from(worker, 'base64')),
+      });
+      await canvas.dispose();
+    }
+    await manager.close(profile.id);
+    return results;
+  }
+  try {
+    for (const enabled of [false, true, false]) {
+      store.update(profile.id, { canvasSiteProtection: enabled });
+      const [first, second, revisit] = await measure();
+      assert.deepEqual(revisit, first, 'repeat visit in the same session');
+      for (const channel of ['raw', 'png', 'worker']) {
+        const isolated = first[channel] !== second[channel];
+        t.diagnostic(`Canvas protection=${enabled} ${channel} cross-site difference=${isolated}`);
+        assert.equal(isolated, enabled, channel + ' across top-level sites');
+      }
+    }
+  } finally {
+    await manager.closeAll();
+    await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 6, retryDelay: 300 });
+  }
+});

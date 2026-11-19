@@ -177,6 +177,7 @@ async function saveNewProfile(openAfter = false) {
     const seed = document.getElementById('n-fingerprint-seed');
     if (seed) { seed.value = ''; document.getElementById('n-hardware-id').textContent = '保存时生成固定配置编号'; }
     const mode = document.getElementById('n-fingerprint-mode');
+    document.getElementById('n-kernel-canvas').checked = false;
     mode.value = 'random';
     mode.dispatchEvent(new Event('change'));
     toast('环境已创建');

@@ -17,7 +17,7 @@ const DEFAULT_SPEC = {
   locale: 'auto', timezone: 'auto', canvasSeed: null, canvasNoise: false,
   hardwareConcurrency: null, deviceMemory: null, webrtc: 'auto', colorScheme: 'light', reducedMotion: 'no-preference',
   contrast: 'no-preference', forcedColors: 'none',
-  gpuPreset: 'native', audioNoise: false, fingerprintSeed: null,
+  gpuPreset: 'native', audioNoise: false, fingerprintSeed: null, canvasSiteProtection: false,
 };
 const pick = value => Object.fromEntries(Object.keys(DEFAULT_SPEC).filter(k => Object.hasOwn(value, k)).map(k => [k, value[k]]));
 
@@ -58,6 +58,7 @@ class ProfileStore {
       if (p.id !== id) throw new Error('环境记录 ID 不一致');
       if (p.proxy) p.proxy.password = this.codec.decode(p.proxy.password);
       p.fingerprintMode ||= 'legacy';
+      p.canvasSiteProtection ??= false;
       const scale = typeof p.deviceScaleFactor === 'string' ? Number(p.deviceScaleFactor) : p.deviceScaleFactor;
       p.deviceScaleFactor = Number.isFinite(scale) && scale >= 0.5 && scale <= 4 ? scale : DEFAULT_SPEC.deviceScaleFactor;
       if (['hardware', 'kernel'].includes(p.fingerprintMode)) {
@@ -127,6 +128,9 @@ class ProfileStore {
     } else if (changes.fingerprintMode === 'native' && ['hardware', 'kernel'].includes(old.fingerprintMode)) {
       const { hardwareConcurrency, deviceMemory, gpuPreset, canvasNoise, audioNoise } = DEFAULT_SPEC;
       Object.assign(next, { hardwareConcurrency, deviceMemory, gpuPreset, canvasNoise, audioNoise }, changes);
+    }
+    if (next.fingerprintMode !== 'kernel' && !Object.hasOwn(changes, 'canvasSiteProtection')) {
+      next.canvasSiteProtection = false;
     }
     if (next.fingerprintMode === 'kernel' && old.fingerprintMode !== 'kernel' && !Object.hasOwn(changes, 'gpuPreset')) next.gpuPreset = 'native';
     next = completeHardware(next, old.fingerprintMode === 'hardware' ? { ...old, ...patch } : patch);

@@ -237,6 +237,9 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.equal(await page.locator('#n-hardware-cpu').isVisible(), true);
     assert.equal(await page.locator('#n-software-noise').isVisible(), false);
     assert.equal(await page.locator('#n-software-memory').isVisible(), false);
+    const canvasProtection = page.getByLabel('按站点保护 Canvas 读取');
+    assert.equal(await canvasProtection.isChecked(), false);
+    await canvasProtection.check();
     await page.locator('#n-hardware-cpu').selectOption('4');
     assert.equal(await page.locator('#n-hardware-gpu option').count(), 1);
     assert.equal(await page.locator('#n-hardware-gpu').inputValue(), 'native');
@@ -245,6 +248,7 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.locator('#n-save').click();
     assert.equal((await kernelCreated).status(), 200);
     const kernel = Object.values(JSON.parse(fs.readFileSync(profiles.file))).find(record => record.fingerprintMode === 'kernel');
+    assert.equal(kernel.canvasSiteProtection, true);
     assert.equal(kernel.hardwareConcurrency, 4); assert.equal(kernel.deviceMemory, null); assert.equal(kernel.canvasNoise, false); assert.equal(kernel.audioNoise, false);
     const kernelCard = page.locator('.env-card').filter({ has: page.locator('.name', { hasText: /^3$/ }) });
     if (process.env.CIKE_CAMOUFOX_EXECUTABLE) {

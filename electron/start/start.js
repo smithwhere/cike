@@ -222,8 +222,9 @@ valuesPanel.addEventListener('toggle', () => {
       : matchMedia('(prefers-contrast: custom)').matches ? '自定义对比度' : '默认对比度';
   text('readout-appearance', `${mode} / ${motion} / ${colors} / ${contrast}`);
   const policy = { native: '原生一致', kernel: '内核模拟', hardware: '硬件模拟（软件层）' }[config.mode] || '未知';
-  const processing = enabled => enabled ? '固定处理' : '原生输出';
-  text('readout-mode', `${policy} · Canvas ${processing(config.canvasProcessing)} · 音频 原生输出`);
+  let canvasMode = config.canvasProcessing ? '固定处理' : '原生输出';
+  if (config.canvasSiteProtection) canvasMode = '按站点保护';
+  text('readout-mode', `${policy} · Canvas ${canvasMode} · 音频 原生输出`);
   const drawing = { hardware: '硬件加速', software: '兼容软件绘制' }[config.graphicsMode] || '内核自动选择';
   text('readout-graphics-mode', `${config.gpuPreset} / ${drawing}`);
   text('readout-graphics', graphicsReadout());
