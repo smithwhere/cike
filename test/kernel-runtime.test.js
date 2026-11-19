@@ -108,5 +108,9 @@ test('native core changes hardware without replacing APIs, agrees across workers
       assert.deepEqual(await restarted.evaluate(() => ({ cookie: document.cookie, local: localStorage.getItem('kernel') })), { cookie: 'kernel=A', local: 'A' });
       assert.ok(fs.existsSync(path.join(store.profileDir(a.id), 'firefox', 'prefs.js')));
       assert.ok(!fs.existsSync(path.join(store.profileDir(a.id), 'Default')));
-    } finally { await manager.closeAll(); await new Promise(resolve => server.close(resolve)); fs.rmSync(dir, { recursive: true, force: true }); }
+    } finally {
+      await manager.closeAll();
+      await new Promise(resolve => server.close(resolve));
+      await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 6, retryDelay: 300 });
+    }
   });
