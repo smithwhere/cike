@@ -102,7 +102,7 @@ npm run pack:win-x64
 
 ```text
 dist/CIKE-win32-x64/CIKE.exe
-dist/CIKE-0.11.0-windows-x64.zip
+dist/CIKE-0.12.0-windows-x64.zip
 dist/SHA256SUMS.txt
 ```
 
