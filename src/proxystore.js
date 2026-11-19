@@ -17,6 +17,7 @@ class ProxyStore {
     this.file = path.join(dataDir, 'proxies.json');
     privateDirectory(dataDir);
     this.codec = credentials(secretStorage);
+    this.checks = new Map();
     this.proxies = readJSON(this.file, {});
     for (const p of Object.values(this.proxies)) p.password = this.codec.decode(p.password);
     if (Object.keys(this.proxies).length) this._save();
@@ -113,17 +114,35 @@ class ProxyStore {
     return this._public(next);
   }
 
-  setCheckResult(id, result) {
-    const p = this.proxies[id];
-    if (!p) return;
-    Object.assign(p, result, { checkedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    this._save();
+  beginCheck(id) {
+    if (!Object.hasOwn(this.proxies, id)) return null;
+    const record = this.proxies[id];
+    const token = Symbol();
+    this.checks.set(id, token);
+    const current = () => this.proxies[id] === record;
+    return {
+      proxy: structuredClone(record),
+      current,
+      save: result => {
+        if (!current() || this.checks.get(id) !== token) return false;
+        const before = { ...record };
+        const checkedAt = new Date().toISOString();
+        Object.assign(record, { status: result.status, exitIp: result.exitIp || null, country: result.country || null,
+          countryCode: result.countryCode || null, timezone: result.timezone || null, checkedAt, updatedAt: checkedAt });
+        try { this._save(); } catch (error) {
+          this.proxies[id] = before;
+          throw error;
+        }
+        return true;
+      },
+    };
   }
 
   remove(id) {
     if (!this.proxies[id]) return false;
     delete this.proxies[id];
     this._save();
+    this.checks.delete(id);
     return true;
   }
 

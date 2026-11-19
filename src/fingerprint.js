@@ -23,7 +23,7 @@ function validateProfile(profile) {
   }
   const { width, height } = profile.viewport || {};
   if (![width, height].every(n => Number.isInteger(n) && n >= 320 && n <= 7680)) bad('窗口尺寸必须在 320–7680 之间');
-  if (!(profile.deviceScaleFactor >= 0.5 && profile.deviceScaleFactor <= 4)) bad('无效的缩放比例');
+  if (!Number.isFinite(profile.deviceScaleFactor) || profile.deviceScaleFactor < 0.5 || profile.deviceScaleFactor > 4) bad('缩放比例必须为 0.5–4 之间的数字');
   if (![null, 'light', 'dark', 'no-preference'].includes(profile.colorScheme)) bad('无效的外观设置');
   if (profile.reducedMotion != null && !['reduce', 'no-preference'].includes(profile.reducedMotion)) bad('无效的动画偏好');
   if (profile.contrast != null && !['more', 'no-preference'].includes(profile.contrast)) bad('无效的对比度偏好');

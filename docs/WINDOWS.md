@@ -11,6 +11,8 @@ Windows 版源自 [engeeeee/cike](https://github.com/engeeeee/cike) 对 [chainfi
 3. 双击 `CIKE.exe`。运行时已随包提供，无需另装 Node.js。请保留同目录的 DLL、资源目录等文件。
 4. 在“设置”中下载 Chromium 内核，然后创建并打开环境。首次下载需要联网。
 
+Chromium 下载在解压或试运行前校验 SHA-256。`src/chromium-assets.json` 记录版本和平台摘要，摘要从 Google 官方归档计算。升级内核时应同时更新这些摘要。
+
 本包没有 Windows 代码签名，系统可能显示未识别的发布者。可用随包的 `SHA256SUMS.txt` 核对文件。
 
 0.9.0 新增“内核模拟（Camoufox / Firefox）”，在内核中设置 CPU 线程数，并报告原生显卡。先在“设置 → Camoufox 指纹内核”下载约 1.3 GB 内核，再在新建/编辑环境的“指纹选项”选择内核模拟。Firefox 与 Chrome 登录数据独立，旧数据保留，切换后需要重新登录。原软件层模式继续保留。[硬件模拟范围与限制](HARDWARE.md)
@@ -74,6 +76,8 @@ Firefox 的原生窗口和自动化协议里的页面目标并非一一对应。
 同一设置区还提供 61 个语言区域和 64 个时区选项，以及网页外观、动画偏好、对比度偏好和强制配色。打开环境检测页中的“当前网页读到的参数”，可以核对 UA、CSS 屏幕、视口、DPR、语言列表、CPU／网页内存、外观、WebGL／WebGPU、常见字体、编解码格式、连接估计和该页定位权限。读数在本页计算，可离线查看。通过「检测出口 IP」手动查询公网出口和地区。参数参考 [Unicode CLDR](https://cldr.unicode.org/translation/translation-guide-general/default-content)、[IANA 时区数据库](https://www.iana.org/time-zones)、[CSS 强制配色](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/%40media/forced-colors) 和 [Windows 11 字体清单](https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list)。
 
 ## 数据和更新
+
+删除环境时，如果文件被占用，环境卡片会显示「待清理」。关闭占用文件的进程后可以重试删除。待清理的环境无法再次打开。
 
 - 默认数据目录：`%LOCALAPPDATA%\CIKE`。设置中的“打开数据目录”可以直接打开。
 - 自定义数据目录：在启动前设置 `LFB_DATA`。桌面版与独立 Node API 应使用不同数据目录。

@@ -1,0 +1,10 @@
+{
+  "version": "158.0.8127.36",
+  "sha256": {
+    "win64": "6a8ad290952cc612c7777ffb3eb62f345539a2a1a8d440cfac190c6d36b34d2c",
+    "linux64": "dba9cc838e1ce269c33ea68170881127bd15d078fc3ca5891c90802819a4d7c7",
+    "linux-arm64": "f811b64a50cbc73f94fda7b3f3b3bf62be5d9409b3207e6ead9b61e6706afffe",
+    "mac-arm64": "b86d3b393def1f87d369b022abff0a51acb015d6fcb79ddfd1c379c9d72fbbe2",
+    "mac-x64": "1390e9b1386a1fd8ec2c4940b9ff59cbbda71b896b85182d7efbd73c58213802"
+  }
+}

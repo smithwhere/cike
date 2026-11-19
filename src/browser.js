@@ -6,9 +6,9 @@ const path = require('path');
 const crypto = require('crypto');
 const { chromium } = require('playwright');
 const { buildContextOptions, webrtcArgs, validateProfile } = require('./fingerprint');
-const { resolveProxy, inlineRecord } = require('./proxyconfig');
+const { resolveProxy } = require('./proxyconfig');
 const { ProxyStore } = require('./proxystore');
-const { checkProxy } = require('./proxycheck');
+const { checkProxy, prepareProxyRoute } = require('./proxycheck');
 const { privateDirectory } = require('./privatefiles');
 const { prepareDownloads, configureDownloads } = require('./downloads');
 const { WindowStateManager } = require('./windowstate');
@@ -73,29 +73,32 @@ class BrowserManager {
   }
   async _open(id, { headless = false } = {}) {
     if (typeof headless !== 'boolean') throw Object.assign(new Error('headless 必须为布尔值'), { status: 400 });
-    if (this.sessions.has(id)) return { profile_id: id, open: true, reused: true, ...this.listOpen().find(s => s.profile_id === id) };
     const profile = this.store.get(id);
     if (!profile) throw Object.assign(new Error('环境不存在'), { status: 404 });
+    if (profile.deleting) throw Object.assign(new Error('环境正在等待清理，不能打开'), { status: 409 });
+    if (this.sessions.has(id)) return { profile_id: id, open: true, reused: true, ...this.listOpen().find(s => s.profile_id === id) };
     validateProfile(profile);
     const checkCancelled = () => { if (this.cancelled.has(id)) throw Object.assign(new Error('环境启动已取消'), { status: 409 }); };
-    let proxyRecord = resolveProxy(profile, this.proxyStore);
-    const useSystemProxy = this.settings?.get().socksViaSystemProxy === true;
-    if (!proxyRecord && useSystemProxy) {
-      const route = await this.settings.route();
-      proxyRecord = inlineRecord({ server: `${route.scheme}://${route.host.includes(':') ? `[${route.host}]` : route.host}:${route.port}` });
-    }
+    const savedProxy = profile.proxyId ? this.proxyStore?.beginCheck(profile.proxyId) : null;
+    const route = await prepareProxyRoute(savedProxy?.proxy ?? resolveProxy(profile, this.proxyStore), this.settings);
+    const { proxy: proxyRecord, systemProxy } = route;
+    const checkRoute = () => {
+      checkCancelled();
+      route.assertCurrent();
+      const current = this.store.get(id);
+      if (!current || current.deleting || current.updatedAt !== profile.updatedAt ||
+          (savedProxy && !savedProxy.current()) ||
+          JSON.stringify([current.proxyId, current.proxy]) !== JSON.stringify([profile.proxyId, profile.proxy])) {
+        throw Object.assign(new Error('环境或代理在检测期间发生变化，请重试'), { status: 409 });
+      }
+    };
+    checkRoute();
     const effective = { ...profile };
     let network = { route: proxyRecord ? 'proxy' : 'system', exitIp: null };
     if (proxyRecord) {
-      const result = await this.checkProxy(proxyRecord, this.settings);
-      checkCancelled();
-      // The check awaited external I/O: refuse stale/deleted/rebound settings.
-      const current = this.store.get(id);
-      if (!current || current.updatedAt !== profile.updatedAt ||
-          ((profile.proxyId || profile.proxy) && JSON.stringify(resolveProxy(current, this.proxyStore)) !== JSON.stringify(proxyRecord))) {
-        throw Object.assign(new Error('环境或代理在检测期间发生变化，请重试'), { status: 409 });
-      }
-      if (profile.proxyId) this.proxyStore.setCheckResult(profile.proxyId, result);
+      const result = await this.checkProxy(proxyRecord, this.settings, route);
+      checkRoute();
+      savedProxy?.save(result);
       if (result.status !== 'ok') throw Object.assign(new Error(result.error || '代理连接失败，已阻止启动'), { status: 502 });
       if (profile.timezone === 'auto') {
         if (!result.timezone) throw Object.assign(new Error('代理出口时区未知，请重新检测或手动选择时区；不会回退到本机时区'), { status: 409 });
@@ -121,9 +124,8 @@ class BrowserManager {
       launched.once('close', () => { if (!process || process.exitCode != null || process.signalCode != null) forget(); });
     };
     try {
-      if (proxyRecord?.type === 'socks5' && (proxyRecord.username || proxyRecord.password || useSystemProxy)) {
+      if (proxyRecord?.type === 'socks5' && (proxyRecord.username || proxyRecord.password || systemProxy)) {
         const { SocksForwarder } = require('./socksfwd');
-        const systemProxy = useSystemProxy ? await this.settings.route(proxyRecord.host, proxyRecord.port) : null;
         forwarder = await SocksForwarder.start({ ...proxyRecord, systemProxy });
         proxy = { server: `http://127.0.0.1:${forwarder.port}`, bypass: '<-loopback>' };
       } else if (proxy) proxy.bypass = '<-loopback>';
@@ -139,7 +141,7 @@ class BrowserManager {
           ...(!kernel && effective.userAgent ? [`--user-agent=${effective.userAgent}`] : []),
           ...(effective.locale !== 'auto' ? [`--lang=${effective.locale}`, `--accept-lang=${effective.locale}`] : []),
           ...(debugPort ? [`--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1'] : []),
-          ...webrtcArgs({ ...effective, proxy: proxy || useSystemProxy || profile.webrtc === 'auto' }),
+          ...webrtcArgs({ ...effective, proxy: proxy || profile.webrtc === 'auto' }),
         ],
       };
       if (manageWindows) {
@@ -182,11 +184,12 @@ class BrowserManager {
           }
         }
         const graphics = this.settings?.get();
+        checkRoute();
         ({ context, graphicsMode, graphicsFallback } = await launchWithGraphics(mode => require('./native-runtime').launchNative({
           dataDir: this.store.dataDir, directory, profile: effective, proxy, headless, downloadsDirectory, bridge, display, graphicsMode: mode,
           onContext: trackContext,
         }), { mode: graphics?.camoufoxGraphicsMode || 'auto', remembered: graphics?.camoufoxAutoSoftware === true, beforeRetry: () => {
-          checkCancelled();
+          checkRoute();
           const entry = this.windowTokens.get(windowToken); if (entry) entry.ready = false;
         } }));
         let closed = false;
@@ -205,13 +208,14 @@ class BrowserManager {
         if (closed) throw new Error('浏览器已关闭');
       } else {
         await prepareDownloads(directory, this.downloadsDirectory);
+        checkRoute();
         context = await chromium.launchPersistentContext(directory, launchOptions);
         trackContext(context);
       }
       if (profile.fingerprintMode === 'hardware') await require('./hardware-runtime').installHardwareContext(context, profile);
       if (manageWindows) await this.windowStates.attach(context);
       if (!kernel) await configureDownloads(context);
-      checkCancelled();
+      checkRoute();
       const session = { context, debugPort, headless, openedAt: Date.now(), forwarder, network, windowControl, graphicsMode };
       this.sessions.set(id, session);
       this.crashes.delete(id);

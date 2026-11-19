@@ -274,7 +274,7 @@ function renderProfiles() {
         <div class="environment-identity">
           <div class="environment-title"><div class="name">${esc(p.name)}</div><span class="environment-group" title="${esc(p.group || '未分组')}">${esc(p.group || '未分组')}</span></div>
           <div class="environment-state">
-            <span class="pill ${p.open ? 'open' : 'closed'}">${p.phase === 'opening' ? '启动中' : p.phase === 'closing' ? '关闭中' : p.open ? '运行中' : '已关闭'}</span>
+            <span class="pill ${p.open ? 'open' : 'closed'}">${p.deleting ? '待清理' : p.phase === 'opening' ? '启动中' : p.phase === 'closing' ? '关闭中' : p.open ? '运行中' : '已关闭'}</span>
             <span class="environment-mode">${p.fingerprintMode === 'kernel' ? '内核模拟 · Firefox' : p.fingerprintMode === 'hardware' ? '硬件模拟 · 软件层' : p.fingerprintMode === 'native' ? '原生一致' : '旧环境 · 需要转换'}</span>
             ${p.nativeGraphicsMode === 'software' ? '<span class="environment-mode">兼容绘制</span>' : ''}
             ${p.nativeCrash ? '<span class="environment-window-warning" role="status">标签页发生崩溃；可关闭重开环境并导出诊断</span>' : ''}
@@ -283,7 +283,7 @@ function renderProfiles() {
         </div>
         <div class="environment-network">
           <div class="environment-network-title"><span class="environment-label">${p.proxyIp ? '出口 IP' : p.proxyAddress ? '代理地址' : '网络连接'}</span>
-          <button class="proxy-link" data-act="proxy" data-id="${p.id}" title="点击修改当前环境代理">${esc(p.proxyIp || p.proxyAddress || '未配置代理')} <span aria-hidden="true">✎</span></button></div>
+          <button class="proxy-link" data-act="proxy" data-id="${p.id}" title="点击修改当前环境代理" ${p.deleting ? 'disabled' : ''}>${esc(p.proxyIp || p.proxyAddress || '未配置代理')} <span aria-hidden="true">✎</span></button></div>
           <div class="environment-route">${esc(p.proxyRemark || '系统网络')}${p.proxyAddress && p.proxyIp ? ' · ' + esc(p.proxyAddress) : ''}</div>
           <div class="environment-checked">${p.proxyCheckedAt ? '检测于 ' + formatTime(p.proxyCheckedAt) : '尚未检测出口 IP'}</div>
         </div>
@@ -293,11 +293,11 @@ function renderProfiles() {
         </div>
       </div>
       <div class="actions">
-        ${p.open
+        ${p.deleting ? '' : p.open
           ? `<button class="link-btn" data-act="close" data-id="${p.id}">${p.phase === 'opening' ? '取消启动' : '关闭'}</button>`
           : `<button class="link-btn" data-act="open" data-id="${p.id}">打开</button>`}
-        <button class="link-btn" data-act="edit" data-id="${p.id}">编辑</button>
-        <button class="link-btn danger" data-act="del" data-id="${p.id}">删除</button>
+        ${p.deleting ? '' : `<button class="link-btn" data-act="edit" data-id="${p.id}">编辑</button>`}
+        <button class="link-btn danger" data-act="del" data-id="${p.id}">${p.deleting ? '重试删除' : '删除'}</button>
       </div>
     </div>`).join('') + (totalPages > 1 ? renderPagination(state.profilePage, totalPages, 'profile') : '');
   renderSideGroups();
@@ -356,7 +356,10 @@ async function handleProfileAction(act, id, btn) {
       return;
     }
     await loadProfiles();
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    toast(err.message, true);
+    if (act === 'del') await loadProfiles();
+  }
   finally { if (btn) btn.disabled = false; }
 }
 

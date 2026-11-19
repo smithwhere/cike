@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { pipeline } = require('stream/promises');
@@ -11,6 +12,7 @@ const { privateDirectory, writePrivate } = require('../src/privatefiles');
 const { extractBrowserZip } = require('../src/zip');
 const { renameKernel } = require('../src/native-storage');
 const CHROMIUM_VERSION = require('../src/chromium-version');
+const { sha256: archiveDigests } = require('../src/chromium-assets.json');
 const inProgress = new Map();
 const verifiedVersions = new Map();
 function cftPlatform(platform = process.platform, arch = process.arch) {
@@ -100,15 +102,17 @@ async function install(dir, onProgress) {
   const staging = fs.mkdtempSync(path.join(browserRoot(dir), '.install-'));
   let installError;
   try {
+    const expected = archiveDigests[cftPlatform()];
+    if (!expected || !/^[a-f0-9]{64}$/.test(expected)) throw new Error('当前平台没有固定的 Chromium 安装包校验值');
     const zip = path.join(tmp, 'chromium.zip');
     await downloadFile(downloadUrl(), zip, onProgress);
+    const hash = crypto.createHash('sha256');
+    for await (const chunk of fs.createReadStream(zip)) hash.update(chunk);
+    if (hash.digest('hex') !== expected) throw new Error('Chromium 安装包 SHA-256 校验失败');
     if (process.platform === 'darwin') await exec('/usr/bin/unzip', ['-q', zip, '-d', staging], { timeout: 600000 });
     else await extractBrowserZip(zip, staging);
     const executable = findExecutable(staging);
     if (!executable) throw new Error('安装包中没有 Chromium');
-    // Playwright's CfT archive may omit bundle resource seals. Do not repair
-    // that by re-signing locally or claim Developer ID validation: transport
-    // trust is HTTPS to the configured CDN, followed by a version check.
     if (await browserVersion(executable) !== CHROMIUM_VERSION) throw new Error('下载的内核版本不匹配');
     // Keep the downloaded bundle unchanged, including its icon. Old
     // kernels remain available until the new version is fully verified.

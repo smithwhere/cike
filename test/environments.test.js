@@ -77,12 +77,14 @@ test('closing last window terminates only that environment; timestamps persist a
 });
 
 test('close during pending proxy detection cancels launch without recording a last-open time', async () => {
-  const dir=temp(),store=new ProfileStore(dir);let release;
-  const manager=new BrowserManager(store,null,null,{checkProxy:()=>new Promise(r=>release=r)});
+  const dir=temp(),store=new ProfileStore(dir);
+  const started = Promise.withResolvers(), probe = Promise.withResolvers();
+  const manager=new BrowserManager(store,null,null,{checkProxy:()=>{ started.resolve(); return probe.promise; }});
   try {
     const p=store.create({proxy:{server:'http://127.0.0.1:9'},locale:'en-US',timezone:'UTC'});
     const open=manager.open(p.id,{headless:true});const rejected=assert.rejects(open,/取消/);
-    const close=manager.close(p.id); release({status:'ok',exitIp:'192.0.2.1'});
+    await started.promise;
+    const close=manager.close(p.id); probe.resolve({status:'ok',exitIp:'192.0.2.1'});
     await rejected;await close;assert.equal(manager.isOpen(p.id),false);assert.equal(store.get(p.id).lastOpenedAt,undefined);
   } finally {await manager.closeAll();fs.rmSync(dir,{recursive:true,force:true});}
 });

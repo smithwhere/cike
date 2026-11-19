@@ -23,7 +23,8 @@ const lockfile = require('proper-lockfile');
 const { ProfileStore } = require('./store');
 const { ProxyStore } = require('./proxystore');
 const { BrowserManager } = require('./browser');
-const { checkProxy } = require('./proxycheck');
+const { checkProxy, prepareProxyRoute } = require('./proxycheck');
+const { resolveProxy } = require('./proxyconfig');
 const { Settings } = require('./settings');
 
 const VERSION = require('../package.json').version;
@@ -191,7 +192,7 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
     const profiles = store.list().map((p) => ({
       ...store.public(p),
       open: browsers.isOpen(p.id),
-      phase: browsers.closing.has(p.id) ? 'closing' : browsers.opening.has(p.id) ? 'opening' : browsers.isOpen(p.id) ? 'open' : 'closed',
+      phase: p.deleting ? 'deleting' : browsers.closing.has(p.id) ? 'closing' : browsers.opening.has(p.id) ? 'opening' : browsers.isOpen(p.id) ? 'open' : 'closed',
       windowWarning: browsers.windowWarning(p.id),
       nativeGraphicsMode: browsers.sessions.get(p.id)?.graphicsMode || null,
       nativeCrash: browsers.crashes.get(p.id) || null,
@@ -227,11 +228,16 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
   router.post('/profiles/:id/checkProxy', async ctx => {
     const id = ctx.params.id, profile = store.get(id);
     if (!profile) ctx.throw(404, '环境不存在');
-    const proxy = require('./proxyconfig').resolveProxy(profile, proxyStore);
-    if (!proxy) ctx.throw(400, '未配置代理，请打开环境检测系统网络出口');
-    const result = await (options.checkProxy || checkProxy)(proxy, settings);
-    if (JSON.stringify(require('./proxyconfig').resolveProxy(store.get(id) || {}, proxyStore)) !== JSON.stringify(proxy)) ctx.throw(409, '代理已改变，请重新检测');
-    if (profile.proxyId) proxyStore.setCheckResult(profile.proxyId, result);
+    if (profile.deleting) ctx.throw(409, '环境正在等待清理');
+    const saved = profile.proxyId ? proxyStore.beginCheck(profile.proxyId) : null;
+    const route = await prepareProxyRoute(saved?.proxy ?? resolveProxy(profile, proxyStore), settings);
+    if (!route.proxy) ctx.throw(400, '未配置代理，请打开环境检测系统网络出口');
+    const result = await (options.checkProxy || checkProxy)(route.proxy, settings, route);
+    route.assertCurrent();
+    const current = store.get(id);
+    if (!current || current.deleting ||
+        JSON.stringify([current.proxyId, current.proxy]) !== JSON.stringify([profile.proxyId, profile.proxy]) ||
+        (saved && !saved.save(result))) ctx.throw(409, '代理配置或最新检测已变化，请重新检测');
     store.recordNetwork(id, { route: 'proxy', exitIp: result.exitIp || null, checkedAt: new Date().toISOString() });
     ctx.body = { ok: true, result };
   });
@@ -262,8 +268,9 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
   });
 
   router.delete('/profiles/:id', async (ctx) => {
+    if (!store.markDeleting(ctx.params.id)) ctx.throw(404, 'profile not found');
     await browsers.close(ctx.params.id);
-    if (!store.remove(ctx.params.id)) ctx.throw(404, 'profile not found');
+    store.remove(ctx.params.id);
     ctx.body = { ok: true };
   });
 
@@ -301,20 +308,20 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
     const ids = body.ids || proxyStore.list().map((p) => p.id);
     const results = [];
     for (const id of ids) {
-      const secret = proxyStore.getSecret(id);
-      if (!secret) {
+      const check = proxyStore.beginCheck(id);
+      if (!check) {
         results.push({ id, status: 'failed', error: 'not found' });
         continue;
       }
-      const r = await (options.checkProxy || checkProxy)(secret, settings);
-      proxyStore.setCheckResult(id, {
-        status: r.status,
-        exitIp: r.exitIp || null,
-        country: r.country || null,
-        countryCode: r.countryCode || null,
-        timezone: r.timezone || null,
-      });
-      results.push({ id, ...r });
+      try {
+        const route = await prepareProxyRoute(check.proxy, settings);
+        const result = await (options.checkProxy || checkProxy)(route.proxy, settings, route);
+        route.assertCurrent();
+        if (!check.save(result)) ctx.throw(409, '代理配置或最新检测已变化，请重新检测');
+        results.push({ id, ...result });
+      } catch (error) {
+        results.push({ id, status: 'failed', error: error.message });
+      }
     }
     ctx.body = { ok: true, results };
   });

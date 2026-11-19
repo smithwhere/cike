@@ -40,6 +40,22 @@ test('hardware settings have stable per-profile seeds and preserve explicit choi
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('device scale is a finite number and older numeric strings migrate', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-scale-store-'));
+  try {
+    const store = new ProfileStore(dir);
+    const profile = store.create({ deviceScaleFactor: 1.25 });
+    for (const invalid of ['2', true, [2], NaN, Infinity, 4.5]) {
+      assert.throws(() => store.update(profile.id, { deviceScaleFactor: invalid }), { status: 400 });
+    }
+    const records = JSON.parse(fs.readFileSync(store.file));
+    records[profile.id].deviceScaleFactor = '1.25';
+    fs.writeFileSync(store.file, JSON.stringify(records));
+    const loaded = new ProfileStore(dir).get(profile.id);
+    assert.equal(buildContextOptions(loaded).options.deviceScaleFactor, 1.25);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('worker startup rejects genuine errors and preserves the environment for disposed workers', async (t) => {
   class Session extends EventEmitter {
     constructor(connection, id) {

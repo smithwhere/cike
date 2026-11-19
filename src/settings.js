@@ -7,6 +7,7 @@ class Settings {
   constructor(dir, resolveSystemProxy) {
     this.file = path.join(dir, 'settings.json');
     this.resolveSystemProxy = resolveSystemProxy;
+    this.proxyRevision = 0;
     privateDirectory(dir);
     const saved = readJSON(this.file, {});
     this.value = { socksViaSystemProxy: saved.socksViaSystemProxy === true,
@@ -32,6 +33,7 @@ class Settings {
       next.browserWindowMode = value.browserWindowMode;
     }
     writeJSON(this.file, next);
+    if (next.socksViaSystemProxy !== this.value.socksViaSystemProxy) this.proxyRevision++;
     this.value = next;
     return this.get();
   }

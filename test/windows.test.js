@@ -8,7 +8,7 @@ const { pipeline } = require('stream/promises');
 const { ZipFile } = require('yazl');
 const { defaultDataDirectory, curlRuntime } = require('../src/platform');
 const { extractBrowserZip } = require('../src/zip');
-const { cftPlatform, downloadUrl, findExecutable, browserVersion } = require('../electron/chromium');
+const { cftPlatform, downloadUrl, findExecutable, browserVersion, downloadChromium, executableMarker } = require('../electron/chromium');
 const CHROMIUM_VERSION = require('../src/chromium-version');
 const { displayCatalog, emulatedDisplay } = require('../src/display-presets');
 const { ProfileStore } = require('../src/store');
@@ -84,6 +84,28 @@ test('Windows downloads win64 Chromium and rejects unsupported architectures', (
   assert.ok(downloadUrl('win32', 'x64').includes(`/${CHROMIUM_VERSION}/`));
   assert.throws(() => cftPlatform('win32', 'arm64'), /x64/);
   assert.equal(cftPlatform('darwin', 'arm64'), 'mac-arm64');
+  const { sha256 } = require('../src/chromium-assets.json');
+  assert.deepEqual(Object.keys(sha256).sort(), ['linux-arm64', 'linux64', 'mac-arm64', 'mac-x64', 'win64']);
+  for (const digest of Object.values(sha256)) assert.match(digest, /^[a-f0-9]{64}$/);
+});
+
+test('Chromium rejects unverified download bytes before trying to extract them', async t => {
+  const { EventEmitter } = require('node:events'), { Readable } = require('node:stream');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-chromium-digest-'));
+  t.mock.method(require('node:https'), 'get', (_url, _options, receive) => {
+    const request = new EventEmitter();
+    request.setTimeout = () => {};
+    const response = Readable.from([Buffer.from('test data with an intentionally wrong digest')]);
+    response.statusCode = 200;
+    response.headers = {};
+    queueMicrotask(() => receive(response));
+    return request;
+  });
+  try {
+    await assert.rejects(downloadChromium(dir), /SHA-256/);
+    assert.equal(fs.existsSync(executableMarker(dir)), false);
+    assert.deepEqual(fs.readdirSync(path.dirname(executableMarker(dir))), []);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('Windows version detection queries Chromium and always closes its sandboxed probe', async () => {

@@ -32,6 +32,8 @@ class ProfileStore {
       if (p.id !== id) throw new Error('环境记录 ID 不一致');
       if (p.proxy) p.proxy.password = this.codec.decode(p.proxy.password);
       p.fingerprintMode ||= 'legacy';
+      const scale = typeof p.deviceScaleFactor === 'string' ? Number(p.deviceScaleFactor) : p.deviceScaleFactor;
+      p.deviceScaleFactor = Number.isFinite(scale) && scale >= 0.5 && scale <= 4 ? scale : DEFAULT_SPEC.deviceScaleFactor;
       if (['hardware', 'kernel'].includes(p.fingerprintMode)) {
         p.audioNoise = false;
         if (Object.hasOwn(GPU_PRESETS, p.gpuPreset) && !isGpuPresetAllowed(p.gpuPreset, p.fingerprintMode)) p.gpuPreset = 'native';
@@ -76,6 +78,7 @@ class ProfileStore {
   update(id, patch = {}) {
     const old = this.get(id);
     if (!old) return null;
+    if (old.deleting) throw Object.assign(new Error('环境正在等待清理，不能编辑'), { status: 409 });
     const changes = pick(patch);
     let next = { ...old, ...changes, updatedAt: new Date().toISOString() };
     if (old.fingerprintMode === 'legacy' && ['native', 'hardware', 'kernel'].includes(patch.fingerprintMode)) {
@@ -110,24 +113,39 @@ class ProfileStore {
   recordOpened(id, network) {
     const p = this.get(id);
     if (!p) throw new Error('环境不存在');
+    if (p.deleting) throw Object.assign(new Error('环境正在等待清理'), { status: 409 });
     this.profiles[id] = { ...p, lastOpenedAt: new Date().toISOString(), lastNetwork: network };
     try { this._save(); } catch (error) { this.profiles[id] = p; throw error; }
   }
   recordNetwork(id, network) {
     const p = this.get(id);
-    if (!p) return;
+    if (!p || p.deleting) return;
     this.profiles[id] = { ...p, lastNetwork: network };
     try { this._save(); } catch (error) { this.profiles[id] = p; throw error; }
   }
-  remove(id) {
+  markDeleting(id) {
     const rec = this.get(id);
     if (!rec) return false;
+    if (rec.deleting) return true;
+    this.profiles[id] = { ...rec, deleting: true };
+    try { this._save(); } catch (error) { this.profiles[id] = rec; throw error; }
+    return true;
+  }
+  remove(id) {
+    if (!this.markDeleting(id)) return false;
+    const rec = this.get(id);
+    const app = path.join(require('./profileapp').appsRoot(this.dataDir), `CIKE-${rec.sequence}-${id}.app`);
+    const cleanup = { recursive: true, force: true, maxRetries: 3, retryDelay: 150 };
+    try {
+      fs.rmSync(this.profileDir(id), cleanup);
+      fs.rmSync(app, cleanup);
+      fs.rmSync(app + '.json', cleanup);
+      fs.rmSync(path.join(this.dataDir, 'diagnostics', id + '.json'), cleanup);
+    } catch (error) {
+      throw Object.assign(new Error('环境数据尚未清理，可关闭相关进程后重试删除', { cause: error }), { status: 409 });
+    }
     delete this.profiles[id];
     try { this._save(); } catch (error) { this.profiles[id] = rec; throw error; }
-    fs.rmSync(this.profileDir(id), { recursive: true, force: true });
-    const app = path.join(require('./profileapp').appsRoot(this.dataDir), `CIKE-${rec.sequence}-${id}.app`);
-    fs.rmSync(app, { recursive: true, force: true });
-    fs.rmSync(app + '.json', { force: true });
     return true;
   }
   profileDir(id) {

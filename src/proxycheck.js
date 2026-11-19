@@ -34,14 +34,35 @@ function curl(proxy, url, timeoutMs = 12000) {
     child.stdin.end(config);
   });
 }
-async function checkProxy(proxy, settings) {
+async function prepareProxyRoute(proxy, settings) {
+  const relevant = !proxy || proxy.type === 'socks5';
+  const enabled = settings?.get().socksViaSystemProxy === true;
+  const revision = settings?.proxyRevision;
+  const assertCurrent = () => {
+    if (relevant && ((settings?.get().socksViaSystemProxy === true) !== enabled || settings?.proxyRevision !== revision)) {
+      throw Object.assign(new Error('系统代理设置在检测期间发生变化，请重试'), { status: 409 });
+    }
+  };
+  let upstream = null;
+  if (relevant && enabled) {
+    upstream = await settings.route(proxy?.host, proxy?.port);
+    assertCurrent();
+    if (!upstream) throw Object.assign(new Error('系统代理不可用，已阻止启动'), { status: 409 });
+  }
+  const selected = proxy || (upstream && { type: upstream.scheme, host: upstream.host, port: upstream.port });
+  if (selected) validateProxy(selected);
+  return { proxy: selected, systemProxy: proxy ? upstream : null, assertCurrent };
+}
+
+async function checkProxy(proxy, settings, preparedRoute) {
   let forwarder;
   try {
     validateProxy(proxy);
+    const route = preparedRoute ?? await prepareProxyRoute(proxy, settings);
+    route.assertCurrent();
     let effective = proxy;
-    if (proxy.type === 'socks5' && settings?.get().socksViaSystemProxy) {
-      const systemProxy = await settings.route(proxy.host, proxy.port);
-      forwarder = await SocksForwarder.start({ ...proxy, systemProxy });
+    if (route.systemProxy) {
+      forwarder = await SocksForwarder.start({ ...proxy, systemProxy: route.systemProxy });
       effective = { type: 'http', host: '127.0.0.1', port: forwarder.port };
     }
     // Both endpoints are HTTPS and always use exactly the selected route.
@@ -62,4 +83,4 @@ async function checkProxy(proxy, settings) {
     return { status: 'failed', exitIp: null, country: null, countryCode: null, timezone: null, error: error.message };
   } finally { await forwarder?.stop(); }
 }
-module.exports = { checkProxy, curl };
+module.exports = { checkProxy, prepareProxyRoute, curl };
