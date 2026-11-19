@@ -35,7 +35,7 @@ async function newWindow(context, control) {
 
 for (const engine of ['Chromium', 'Camoufox']) {
   const kernel = engine === 'Camoufox';
-  test(`${engine} applies the Windows display preset to the initial page and new window`, {
+  test(`${engine} applies Windows display metrics to the initial page and opened window`, {
     skip: process.platform !== 'win32' || (kernel && !process.env.CIKE_CAMOUFOX_EXECUTABLE), timeout: 90000,
   }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-display-window-'));
@@ -51,7 +51,8 @@ for (const engine of ['Chromium', 'Camoufox']) {
       const opened = context.waitForEvent('page');
       if (kernel) await page.evaluate(() => { window.open('about:blank', '_blank', 'popup,width=600,height=500'); });
       else await (await windowFor(context, page)).session.send('Target.createTarget', { url: 'about:blank', newWindow: true });
-      assert.deepEqual(await (await opened).evaluate(metrics), expected);
+      const expectedWindow = kernel ? { ...expected, viewport: [600, 500] } : expected;
+      assert.deepEqual(await (await opened).evaluate(metrics), expectedWindow);
     } finally { await manager.closeAll(); fs.rmSync(root, { recursive: true, force: true }); }
   });
 }

@@ -98,6 +98,19 @@ test('real Firefox new-tab/new-window commands remain usable in old and new prof
       command = 0; report = []; await manager.open(old.id);
       await until(() => report, tabs => tabs.some(tab => tab.title === 'native-ui-fixture' && tab.status === 'complete'));
       assert.deepEqual(await manager.getContext(old.id).pages()[0].evaluate(() => [document.cookie, localStorage.getItem('recovery')]), ['recovery=retained', 'retained']);
+      if (process.platform === 'win32') {
+        await manager.closeAll();
+        backend.store.update(fresh.id, { display: { preset: 'fhd', scale: 125 } });
+        command = 0; report = []; await manager.open(fresh.id);
+        context = manager.getContext(fresh.id);
+        command = 2; // OpenBrowserWindow(), the browser's Ctrl+N command.
+        await until(() => report, tabs => tabs.length === 2 && tabs.every(tab => tab.title === 'native-ui-fixture' && tab.status === 'complete'));
+        const pages = await until(() => context.pages(), value => value.length === 2);
+        for (const opened of pages) {
+          assert.deepEqual(await opened.evaluate(() => [screen.width, screen.height, innerWidth, innerHeight, devicePixelRatio]),
+            [1536, 864, 1536, 864, 1.25]);
+        }
+      }
       assert.equal(direct, 0);
     } finally {
       await backend?.browsers.closeAll(); if (backend) await new Promise(resolve => backend.server.close(resolve));
