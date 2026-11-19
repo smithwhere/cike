@@ -182,7 +182,7 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
   let index = 0;
   t.mock.method(crypto, 'randomInt', () => index);
 
-  for (const [platform, counts] of [['win', { hardware: 44, kernel: 32 }], ['mac', { hardware: 14, kernel: 17 }]]) {
+  for (const [platform, counts] of [['win', { hardware: 61, kernel: 45 }], ['mac', { hardware: 14, kernel: 17 }]]) {
     const presets = userAgentPresets(platform);
     for (const [fingerprintMode, entries] of Object.entries(presets)) {
       assert.equal(entries.length, counts[fingerprintMode]);
@@ -202,14 +202,25 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
       }
     }
   }
-  assert.equal(values.size, 107);
+  assert.equal(values.size, 137);
   const windows = { platform: 'win', fingerprintMode: 'hardware' };
   const selectable = new Set(userAgentPresets('win', { includeLegacy: false }).hardware.map(([, value]) => value));
-  assert.equal(selectable.size, 30);
+  assert.equal(selectable.size, 53);
   assert.ok(currentUserAgents(windows).every(([, value]) => selectable.has(value)));
   assert.ok([...selectable].every(userAgent => isUserAgentAllowed({ ...windows, userAgent })));
   assert.equal(resolveUserAgent({ platform: 'linux', fingerprintMode: 'hardware' }, 'random'), null);
   assert.equal(resolveUserAgent({ platform: 'win', fingerprintMode: 'native' }, 'random'), null);
+});
+
+test('Windows manual presets include 30 stable majors each for Chrome and Firefox', () => {
+  const { hardware, kernel } = userAgentPresets('win', { includeLegacy: false });
+  const chrome = hardware.filter(([name]) => /^Google Chrome \d+$/.test(name)).map(([, ua]) => ua);
+  const firefox = kernel.filter(([, ua]) => ua.startsWith('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:')).map(([, ua]) => ua);
+
+  assert.deepEqual(chrome, Array.from({ length: 30 }, (_, index) =>
+    `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${158 - index}.0.0.0 Safari/537.36`));
+  assert.deepEqual(firefox, Array.from({ length: 30 }, (_, index) =>
+    `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:${160 - index}.0) Gecko/20100101 Firefox/${160 - index}.0`));
 });
 
 test('region and appearance choices survive reopening and feed browser context options', () => {
