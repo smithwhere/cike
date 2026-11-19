@@ -11,6 +11,8 @@ const { BrowserManager } = require('../src/browser');
 const { buildBackend, startBackend } = require('../src/server');
 const { Settings } = require('../src/settings');
 const { SocksForwarder } = require('../src/socksfwd');
+const { readProxyNetwork } = require('../src/proxycheck');
+const { chromiumBrowsingSwitches } = require('../src/chromium-browsing');
 const { HOST_PLATFORM } = require('../src/fingerprint');
 const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cike-security-'));
 const provider = { encrypt: s => Buffer.from(s).toString('base64'), decrypt: s => Buffer.from(s, 'base64').toString() }; // codec fixture, not production encryption
@@ -104,23 +106,109 @@ test('changing the system-proxy policy during a SOCKS check aborts launch before
   const store = new ProfileStore(dir);
   const profile = store.create({ proxy: { server: 'socks5://proxy.example:1080' }, locale: 'en-US', timezone: 'UTC' });
   settings.set({ socksViaSystemProxy: true });
-  const forwarding = t.mock.method(SocksForwarder, 'start', async () => { throw new Error('unexpected forwarding'); });
-  const manager = new BrowserManager(store, null, settings, { checkProxy: (proxy, _settings, route) => {
-    ready.resolve({ proxy, route });
+  const stop = t.mock.fn(async () => {});
+  const forwarder = { port: 9123, stop };
+  const forwarding = t.mock.method(SocksForwarder, 'start', async () => forwarder);
+  const manager = new BrowserManager(store, null, settings, { checkProxy: (proxy, _settings, route, transport) => {
+    ready.resolve({ proxy, route, transport });
     return probe.promise;
   } });
   try {
     const rejected = assert.rejects(manager.open(profile.id), { status: 409, message: /系统代理设置.*变化/ });
-    const { proxy, route } = await ready.promise;
+    const { proxy, route, transport } = await ready.promise;
     assert.equal(proxy.host, 'proxy.example');
+    assert.equal(transport.forwarder, forwarder);
+    assert.deepEqual(transport.proxy, { type: 'http', host: '127.0.0.1', port: 9123 });
     assert.deepEqual(route.systemProxy, { scheme: 'http', host: '127.0.0.1', port: 8123 });
     settings.set({ socksViaSystemProxy: false });
     settings.set({ socksViaSystemProxy: true });
     probe.resolve({ status: 'ok', exitIp: '192.0.2.1' });
     await rejected;
     assert.equal(lookups, 1);
-    assert.equal(forwarding.mock.callCount(), 0);
+    assert.equal(forwarding.mock.callCount(), 1);
+    assert.equal(stop.mock.callCount(), 1);
   } finally { probe.resolve({ status: 'failed' }); await manager.closeAll(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('independent proxy checks keep the newest result across in-flight checks and saved settings', async () => {
+  const dir = temp();
+  const started = Array.from({ length: 3 }, () => Promise.withResolvers());
+  const probes = started.map(() => Promise.withResolvers());
+  let count = 0;
+  const backend = buildBackend(dir, { checkProxy: () => {
+    const index = count++;
+    started[index].resolve();
+    return probes[index].promise;
+  } });
+  const server = backend.app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  const profile = backend.store.create({ proxy: { server: 'socks5://proxy.example:1080' } });
+  const url = `http://127.0.0.1:${server.address().port}/api/profiles/${profile.id}/checkProxy`;
+  const request = () => fetch(url, { method: 'POST', headers: { 'x-api-token': backend.token } });
+  try {
+    const first = request(); await started[0].promise;
+    const second = request(); await started[1].promise;
+    probes[1].resolve({ status: 'ok', exitIPv6: '2001:0db8::2' });
+    assert.equal((await second).status, 200);
+    probes[0].resolve({ status: 'ok', exitIp: '192.0.2.1' });
+    assert.equal((await first).status, 409);
+    assert.equal(backend.store.get(profile.id).lastNetwork.exitIp, '2001:db8::2');
+    const obsolete = request(); await started[2].promise;
+    backend.store.update(profile.id, { proxy: { server: 'socks5://proxy.example:1081' } });
+    probes[2].resolve({ status: 'ok', exitIp: '192.0.2.3' });
+    assert.equal((await obsolete).status, 409);
+    assert.equal(backend.store.get(profile.id).lastNetwork, null);
+  } finally {
+    for (const probe of probes) probe.resolve({ status: 'failed' });
+    await new Promise(resolve => server.close(resolve));
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('proxy preflight accepts IPv6-only routes and canonicalizes matching exit addresses', async () => {
+  const transport = { type: 'http', host: '127.0.0.1', port: 1080 };
+  const seen = [];
+  const network = await readProxyNetwork(transport, async (proxy, url) => {
+    assert.equal(proxy, transport);
+    const hostname = new URL(url).hostname;
+    seen.push(hostname);
+    if (hostname === 'api.ipify.org') throw new Error('IPv4 not available');
+    if (hostname === 'api6.ipify.org') return '2001:0DB8:0:0:0:0:0:5';
+    return JSON.stringify({ ip: '2001:db8::5', country: 'Fixture', country_code: 'US', timezone: { id: 'Etc/UTC' } });
+  });
+  assert.deepEqual(seen, ['api.ipify.org', 'api6.ipify.org', 'ipwho.is']);
+  assert.deepEqual(network, { exitIp: '2001:db8::5', exitIPv4: null, exitIPv6: '2001:db8::5', country: 'Fixture', countryCode: 'US', timezone: 'Etc/UTC' });
+  await assert.rejects(readProxyNetwork(transport, async () => 'not an IP'), /响应无效/);
+});
+
+test('Chromium restores its browsing protections while retaining other Playwright controls', async () => {
+  const chromium = require('playwright').chromium;
+  const defaults = await chromium._connection.toImpl(chromium).defaultArgs({ chromiumSandbox: true }, true, '.');
+  const { ignoreDefaultArgs, args } = await chromiumBrowsingSwitches(chromium);
+  const actual = [...defaults.filter(arg => !ignoreDefaultArgs.includes(arg)), ...args];
+  for (const arg of ['--disable-background-networking', '--disable-client-side-phishing-detection', '--disable-component-update', '--no-sandbox']) {
+    assert.ok(!actual.includes(arg), arg);
+  }
+  assert.ok(actual.includes('--remote-debugging-pipe'));
+  const features = actual.find(arg => arg.startsWith('--disable-features='));
+  assert.match(features, /PaintHolding/);
+  assert.doesNotMatch(features, /HttpsUpgrades|ThirdPartyStoragePartitioning/);
+});
+
+test('site permissions open in their own running desktop environment', async () => {
+  const dir = temp();
+  try {
+    const store = new ProfileStore(dir), manager = new BrowserManager(store);
+    const chromium = store.create(), firefox = store.create({ fingerprintMode: 'kernel' });
+    await assert.rejects(manager.openSitePermissions(chromium.id), { status: 409 });
+    const navigations = [];
+    for (const profile of [chromium, firefox]) manager.sessions.set(profile.id, { headless: false, context: {
+      newPage: async () => ({ goto: async url => navigations.push([profile.id, url]), bringToFront: async () => {} }),
+    } });
+    await manager.openSitePermissions(firefox.id);
+    await manager.openSitePermissions(chromium.id);
+    assert.deepEqual(navigations, [[firefox.id, 'about:preferences#privacy'], [chromium.id, 'chrome://settings/content']]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('bulk proxy detection discards a result when its proxy is edited in flight', async () => {

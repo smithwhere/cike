@@ -6,6 +6,7 @@
  */
 const { privateDirectory, readJSON, writeJSON, credentials } = require('./privatefiles');
 const { validateProxy, proxyURL } = require('./proxyconfig');
+const { exitAddresses } = require('./proxycheck');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -58,7 +59,7 @@ class ProxyStore {
       remark: spec.remark || `${spec.host}:${spec.port}`,
       status: 'unchecked',
       checkedAt: null,
-      exitIp: null,
+      ...exitAddresses({}),
       country: null,
       createdAt: now,
       updatedAt: now,
@@ -106,7 +107,7 @@ class ProxyStore {
     const p = this.getSecret(id);
     if (!p) return null;
     const safe = Object.fromEntries(['type', 'host', 'port', 'username', 'password', 'remark'].filter(k => Object.hasOwn(patch, k)).map(k => [k, patch[k]]));
-    const next = { ...p, ...safe, updatedAt: new Date().toISOString(), status: 'unchecked', checkedAt: null, exitIp: null, country: null, countryCode: null, timezone: null };
+    const next = { ...p, ...safe, updatedAt: new Date().toISOString(), status: 'unchecked', checkedAt: null, ...exitAddresses({}), country: null, countryCode: null, timezone: null };
     validateProxy(next);
     next.port = Number(next.port);
     this.proxies[id] = next;
@@ -127,7 +128,7 @@ class ProxyStore {
         if (!current() || this.checks.get(id) !== token) return false;
         const before = { ...record };
         const checkedAt = new Date().toISOString();
-        Object.assign(record, { status: result.status, exitIp: result.exitIp || null, country: result.country || null,
+        Object.assign(record, { status: result.status, ...exitAddresses(result), country: result.country || null,
           countryCode: result.countryCode || null, timezone: result.timezone || null, checkedAt, updatedAt: checkedAt });
         try { this._save(); } catch (error) {
           this.proxies[id] = before;

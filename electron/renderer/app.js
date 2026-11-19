@@ -34,6 +34,10 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function formatExitIps({ exitIPv4, exitIPv6, exitIp }) {
+  return [exitIPv4 && `IPv4 ${exitIPv4}`, exitIPv6 && `IPv6 ${exitIPv6}`].filter(Boolean).join(' · ') || exitIp || '';
+}
+
 function openModal(title, bodyHtml, onMount) {
   const root = document.getElementById('modal-root');
   root.innerHTML = `<div class="modal-backdrop"><div class="modal"><h2>${esc(title)}</h2><div class="modal-body"></div></div></div>`;
@@ -130,7 +134,7 @@ async function autoCheckNewProxy(manual = false) {
     // Restore selection after refresh
     document.getElementById('n-proxy').value = pid;
     if (res?.status === 'ok') {
-      resultEl.textContent = `✓ ${res.exitIp} · ${res.country || ''} · ${res.timezone || ''}（时区/语言将自动跟随）`;
+      resultEl.textContent = `✓ ${formatExitIps(res)} · ${res.country || ''} · ${res.timezone || ''}（时区/语言将自动跟随）`;
       resultEl.style.color = 'var(--green)';
       return res;
     } else {
@@ -283,7 +287,7 @@ function renderProfiles() {
         </div>
         <div class="environment-network">
           <div class="environment-network-title"><span class="environment-label">${p.proxyIp ? '出口 IP' : p.proxyAddress ? '代理地址' : '网络连接'}</span>
-          <button class="proxy-link" data-act="proxy" data-id="${p.id}" title="点击修改当前环境代理" ${p.deleting ? 'disabled' : ''}>${esc(p.proxyIp || p.proxyAddress || '未配置代理')} <span aria-hidden="true">✎</span></button></div>
+          <button class="proxy-link" data-act="proxy" data-id="${p.id}" title="点击修改当前环境代理" ${p.deleting ? 'disabled' : ''}>${esc(formatExitIps({ exitIp: p.proxyIp, exitIPv4: p.proxyIPv4, exitIPv6: p.proxyIPv6 }) || p.proxyAddress || '未配置代理')} <span aria-hidden="true">✎</span></button></div>
           <div class="environment-route">${esc(p.proxyRemark || '系统网络')}${p.proxyAddress && p.proxyIp ? ' · ' + esc(p.proxyAddress) : ''}</div>
           <div class="environment-checked">${p.proxyCheckedAt ? '检测于 ' + formatTime(p.proxyCheckedAt) : '尚未检测出口 IP'}</div>
         </div>
@@ -296,6 +300,7 @@ function renderProfiles() {
         ${p.deleting ? '' : p.open
           ? `<button class="link-btn" data-act="close" data-id="${p.id}">${p.phase === 'opening' ? '取消启动' : '关闭'}</button>`
           : `<button class="link-btn" data-act="open" data-id="${p.id}">打开</button>`}
+        ${p.phase === 'open' ? `<button class="link-btn" data-act="permissions" data-id="${p.id}">网站权限</button>` : ''}
         ${p.deleting ? '' : `<button class="link-btn" data-act="edit" data-id="${p.id}">编辑</button>`}
         <button class="link-btn danger" data-act="del" data-id="${p.id}">${p.deleting ? '重试删除' : '删除'}</button>
       </div>
@@ -345,6 +350,9 @@ async function handleProfileAction(act, id, btn) {
       await api('/api/closeBrowser', { method: 'POST', body: JSON.stringify({ profile_id: id }) });
     } else if (act === 'proxy') {
       await openEnvironmentProxy(state.profiles.find(p => p.id === id));
+      return;
+    } else if (act === 'permissions') {
+      await api('/api/profiles/' + id + '/sitePermissions', { method: 'POST', body: '{}' });
       return;
     } else if (act === 'del') {
       const p = state.profiles.find((x) => x.id === id);
@@ -477,7 +485,7 @@ function openProfileModal(existing) {
         });
         const res = r.results?.[0];
         if (res?.status === 'ok') {
-          resultEl.textContent = `✓ ${res.exitIp} · ${res.country || ''} · ${res.timezone || ''}`;
+          resultEl.textContent = `✓ ${formatExitIps(res)} · ${res.country || ''} · ${res.timezone || ''}`;
           resultEl.style.color = 'var(--green)';
           // Refresh proxy list so timezone/country are current
           await loadProxies();
@@ -565,7 +573,7 @@ function renderProxies() {
         <div class="meta">
           <span class="mono">${esc(x.type)}://${esc(x.host)}:${x.port}</span>
           <span>${statusPill(x)}</span>
-          ${x.exitIp ? `<span class="mono">出口 ${esc(x.exitIp)}</span>` : ''}
+          ${x.exitIp ? `<span class="mono">${esc(formatExitIps(x))}</span>` : ''}
           ${x.country ? `<span>${esc(x.country)}</span>` : ''}
         </div>
       </div>
@@ -836,6 +844,7 @@ async function startChromiumDownload() {
 // ---------- 事件绑定 ----------
 
 document.querySelectorAll('.menu-item').forEach((b) => b.onclick = () => showPage(b.dataset.page));
+document.getElementById('btn-new-independent').onclick = () => showPage('new');
 document.getElementById('btn-refresh-profiles').onclick = loadProfiles;
 document.getElementById('profile-search').oninput = () => { state.profilePage = 0; renderProfiles(); };
 document.getElementById('btn-search').onclick = () => {

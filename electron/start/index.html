@@ -1,8 +1,18 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CIKE 环境检测</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/start.css"></head><body><main><header><span class="badge" id="number"></span><div><p class="eyebrow">CIKE · 环境检测</p><h1 id="name"></h1></div><button id="refresh">检测出口 IP</button></header><section class="hero"><p>当前浏览器出口 IP</p><h2 id="ip">尚未检测</h2><p id="status" role="status">点击按钮后通过当前环境检测出口</p></section><section class="grid"><article><label>连接方式</label><strong id="route"></strong></article><article><label>IP 所在地区</label><strong id="region">等待检测</strong></article><article><label>浏览器时区</label><strong id="timezone"></strong></article><article><label>出口时区</label><strong id="exit-timezone">等待检测</strong></article><article><label>浏览器语言</label><strong id="language"></strong></article><article><label>网络运营商</label><strong id="isp">等待检测</strong></article></section><p class="notice" id="match"></p>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CIKE 环境检测</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/start.css"></head><body><main><header><span class="badge" id="number"></span><div><p class="eyebrow">CIKE · 环境检测</p><h1 id="name"></h1></div><button id="refresh">检测出口 IP</button></header><section class="hero"><p>当前浏览器出口 IP</p><h2 id="ip">尚未检测</h2><p id="status" role="status">点击按钮后通过当前环境检测出口</p></section>
+  <section class="grid">
+    <article><label>IPv4 出口</label><strong id="ip-v4">尚未检测</strong></article>
+    <article><label>IPv6 出口</label><strong id="ip-v6">尚未检测</strong></article>
+    <article><label>连接方式</label><strong id="route"></strong></article>
+    <article><label>出口 IP 所在地区</label><strong id="region">等待检测</strong></article>
+    <article><label>浏览器时区</label><strong id="timezone"></strong></article>
+    <article><label>出口地区时区</label><strong id="exit-timezone">等待检测</strong></article>
+    <article><label>浏览器语言</label><strong id="language"></strong></article>
+    <article><label>网络运营商</label><strong id="isp">等待检测</strong></article>
+  </section><p class="notice" id="match"></p>
   <details id="browser-values" class="browser-values">
     <summary>当前网页读到的参数</summary>
     <p id="readout-mode"></p>
-    <p>同一环境的窗口共享一份配置。比较不同环境时，先核对页首环境编号。Canvas 和音频摘要来自本页的固定测试样本。定位权限仅反映此页。</p>
+    <p>同一环境的窗口共享一份配置。比较独立环境时，先核对页首环境编号。Canvas 和音频摘要来自本页的固定测试样本。</p>
     <section class="grid">
       <article class="wide"><label>User-Agent</label><strong id="readout-ua"></strong></article>
       <article><label>CSS 屏幕 / 可用区域 / DPR</label><strong id="readout-display"></strong></article>
@@ -24,7 +34,7 @@
       <article><label>浏览器报告支持的编解码格式</label><strong id="readout-codecs"></strong></article>
       <article><label>连接估计</label><strong id="readout-network"></strong></article>
       <article><label>WebRTC 策略</label><strong id="readout-webrtc"></strong></article>
-      <article><label>此页的定位权限</label><strong id="readout-location">检测中…</strong></article>
+      <article class="wide"><label>此检测页的定位权限</label><strong id="readout-location">检测中…</strong><p>请在环境管理的「网站权限」中查看和撤销各站点的授权。</p></article>
     </section>
   </details>
-  <footer>本地参数检测可离线运行。点击「检测出口 IP」后，当前环境会访问 api.ipify.org 和 ipwho.is。</footer></main><script src="/config.js"></script><script src="/start.js"></script></body></html>
+  <footer>本地参数检测可离线运行。点击「检测出口 IP」后，当前环境会访问 api.ipify.org、api6.ipify.org 和 ipwho.is。</footer></main><script src="/config.js"></script><script src="/start.js"></script></body></html>

@@ -92,8 +92,8 @@
           <div class="field"><label>WebRTC</label><select id="n-webrtc" class="input"><option value="auto">自动（限制直连 UDP）</option><option value="restricted">限制直连 UDP（可能影响通话）</option><option value="default">默认（绑定代理时仍限制 UDP）</option></select></div>
         </div>
         <div class="row" style="margin-top:4px">
-          <button id="n-save" class="btn primary">创建环境</button>
-          <button id="n-save-open" class="btn">新建独立环境并打开</button>
+          <button id="n-save" class="btn">创建环境</button>
+          <button id="n-save-open" class="btn primary">新建独立环境并打开</button>
         </div>
       </div>
     </section>
@@ -102,6 +102,7 @@
       <div class="page-head">
         <h1>环境管理</h1>
         <div class="toolbar">
+          <button id="btn-new-independent" class="btn primary">新建独立环境</button>
           <input id="profile-search" class="input search" placeholder="搜索名称 / 分组…">
           <label><input type="checkbox" id="profile-all"> 全选筛选结果</label><span id="profile-count"></span>
           <button id="btn-open-profiles" class="btn">打开选中</button>

@@ -72,6 +72,7 @@ test('native fingerprints agree across realms, sandbox stays enabled and five st
     assert.ok(lines.length); assert.ok(lines.every(l => !l.includes('--no-sandbox') && !l.includes('--remote-debugging-port')));
     assert.ok(lines.some(l => l.includes('--site-per-process')));
     assert.ok(lines.some(l => l.includes('disable_non_proxied_udp')));
+    assert.ok(lines.every(l => !/HttpsUpgrades|ThirdPartyStoragePartitioning|--disable-client-side-phishing-detection|--disable-component-update/.test(l)));
     await manager.open(b.id, { headless }); const pageB = await manager.getContext(b.id).newPage(); await pageB.goto(origin);
     assert.deepEqual(await storage(pageB, false), { cookie: '', local: null, idb: null, cache: null, sw: 0 });
     await manager.close(a.id); await manager.open(a.id, { headless });
@@ -86,4 +87,23 @@ test('native fingerprints agree across realms, sandbox stays enabled and five st
     assert.deepEqual(nativeWorker, nativeMain);
     assert.equal(nativeMain.timezone, Intl.DateTimeFormat().resolvedOptions().timeZone);
   } finally { await manager.closeAll(); await new Promise(r => server.close(r)); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Chromium partitions embedded storage by top-level site within one environment', { timeout: 45000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-partition-'));
+  const store = new ProfileStore(dir), manager = new BrowserManager(store, null, null, { startPage: false, downloadsDirectory: path.join(dir, 'downloads') });
+  try {
+    const profile = store.create();
+    await manager.open(profile.id, { headless: true });
+    const context = manager.getContext(profile.id), page = await context.newPage();
+    const frameUrl = 'https://embed.test/';
+    await context.route('https://*.test/**', route => route.fulfill({ contentType: 'text/html',
+      body: route.request().url() === frameUrl ? '<!doctype html><p>Embedded</p>' : '<!doctype html><iframe src="https://embed.test/"></iframe>' }));
+    const withinSite = async host => { await page.goto(`https://${host}.test/`); return page.frame({ url: frameUrl }); };
+    await (await withinSite('first')).evaluate(() => localStorage.setItem('partition-test', 'site one'));
+    const secondSite = await withinSite('second');
+    assert.equal(await secondSite.evaluate(() => localStorage.getItem('partition-test')), null);
+    await secondSite.evaluate(() => localStorage.setItem('partition-test', 'site two'));
+    assert.equal(await (await withinSite('first')).evaluate(() => localStorage.getItem('partition-test')), 'site one');
+  } finally { await manager.closeAll(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

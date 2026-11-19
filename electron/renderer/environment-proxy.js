@@ -59,7 +59,7 @@ async function openEnvironmentProxy(profile) {
           $('result').textContent = '已保存，正在检测出口 IP…';
           const { result } = await api('/api/profiles/' + profile.id + '/checkProxy', { method: 'POST', body: '{}' });
           if (result.status !== 'ok') { await loadProfiles(); throw new Error('代理已保存，检测失败：' + (result.error || '连接不可用')); }
-          toast('代理已保存 · ' + result.exitIp);
+          toast('代理已保存 · ' + formatExitIps(result));
         } else toast('当前环境代理已修改');
         close(); await loadProfiles();
       } catch (error) { $('result').textContent = error.message; }

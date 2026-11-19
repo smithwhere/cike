@@ -51,7 +51,7 @@ test('hardware simulation agrees at first script execution across pages, frames 
   const source = `(${observe.toString()})()`;
   const server = http.createServer((request, response) => {
     if (request.url === '/opt-in') response.setHeader('Accept-CH', 'Device-Memory, Sec-CH-Device-Memory');
-    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; worker-src 'self' blob:");
+    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; worker-src 'self' blob:; img-src 'self' https://image.test");
     if (request.url === '/headers') { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(request.headers)); }
     else if (request.url === '/worker.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(`const first=${source};first.then(value=>postMessage(value));`); }
     else if (request.url === '/shared.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(`const first=${source};onconnect=e=>first.then(value=>e.ports[0].postMessage(value));`); }
@@ -120,6 +120,14 @@ test('hardware simulation agrees at first script execution across pages, frames 
       return { raw, repeated: data === canvas.toDataURL(), blob: await fromBlob(blob), data: await fromBlob(decoded) };
     });
     assert.equal(htmlCanvas.raw, main.canvas); assert.equal(htmlCanvas.repeated, true); assert.equal(htmlCanvas.blob, htmlCanvas.raw); assert.equal(htmlCanvas.data, htmlCanvas.raw);
+    await context.route('https://image.test/tainted.svg', route => route.fulfill({ contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="red"/></svg>' }));
+    const exportError = await page.evaluate(async () => {
+      const image = new Image(); image.src = 'https://image.test/tainted.svg'; await image.decode();
+      const canvas = new OffscreenCanvas(4, 4); canvas.getContext('2d').drawImage(image, 0, 0);
+      return canvas.convertToBlob().then(() => 'unexpected export', error => error.name);
+    });
+    assert.equal(exportError, 'SecurityError');
     const webgpu = await page.evaluate(async () => {
       const adapter = await navigator.gpu?.requestAdapter();
       return adapter?.info ? { vendor: adapter.info.vendor, description: adapter.info.description } : null;

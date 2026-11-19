@@ -23,7 +23,7 @@ const lockfile = require('proper-lockfile');
 const { ProfileStore } = require('./store');
 const { ProxyStore } = require('./proxystore');
 const { BrowserManager } = require('./browser');
-const { checkProxy, prepareProxyRoute } = require('./proxycheck');
+const { checkProxy, prepareProxyRoute, exitAddresses } = require('./proxycheck');
 const { resolveProxy } = require('./proxyconfig');
 const { Settings } = require('./settings');
 
@@ -180,10 +180,11 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
     const proxy = profile.proxyId ? proxyStore.get(profile.proxyId) : null;
     if (profile.proxyId && !proxy) return { proxyRemark: '代理已删除', proxyAddress: '', proxyIp: null, proxyCheckedAt: null };
     const latest = proxy && (!profile.lastNetwork?.checkedAt || proxy.updatedAt > profile.lastNetwork.checkedAt) ? proxy : profile.lastNetwork;
+    const { exitIp, exitIPv4, exitIPv6 } = exitAddresses(latest || {});
     return {
       proxyRemark: proxy ? proxy.remark : profile.proxy ? '独立代理' : '系统网络',
       proxyAddress: proxy ? `${proxy.host}:${proxy.port}` : profile.proxy?.server || '',
-      proxyIp: latest?.exitIp || null,
+      proxyIp: exitIp, proxyIPv4: exitIPv4, proxyIPv6: exitIPv6,
       proxyCheckedAt: latest?.checkedAt || null,
     };
   }
@@ -229,17 +230,21 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
     const id = ctx.params.id, profile = store.get(id);
     if (!profile) ctx.throw(404, '环境不存在');
     if (profile.deleting) ctx.throw(409, '环境正在等待清理');
+    const check = store.beginNetworkCheck(id);
     const saved = profile.proxyId ? proxyStore.beginCheck(profile.proxyId) : null;
     const route = await prepareProxyRoute(saved?.proxy ?? resolveProxy(profile, proxyStore), settings);
     if (!route.proxy) ctx.throw(400, '未配置代理，请打开环境检测系统网络出口');
     const result = await (options.checkProxy || checkProxy)(route.proxy, settings, route);
     route.assertCurrent();
-    const current = store.get(id);
-    if (!current || current.deleting ||
-        JSON.stringify([current.proxyId, current.proxy]) !== JSON.stringify([profile.proxyId, profile.proxy]) ||
+    if (!check.current() ||
         (saved && !saved.save(result))) ctx.throw(409, '代理配置或最新检测已变化，请重新检测');
-    store.recordNetwork(id, { route: 'proxy', exitIp: result.exitIp || null, checkedAt: new Date().toISOString() });
+    check.save({ route: 'proxy', ...exitAddresses(result), checkedAt: new Date().toISOString() });
     ctx.body = { ok: true, result };
+  });
+
+  router.post('/profiles/:id/sitePermissions', async ctx => {
+    await browsers.openSitePermissions(ctx.params.id);
+    ctx.body = { ok: true };
   });
 
   router.post('/profiles', (ctx) => {

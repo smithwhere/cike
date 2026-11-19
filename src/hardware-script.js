@@ -36,7 +36,24 @@ function installHardware(config) {
   };
   const canvas2D = globalThis.CanvasRenderingContext2D?.prototype;
   const offscreen2D = globalThis.OffscreenCanvasRenderingContext2D?.prototype;
+  const htmlCanvas = globalThis.HTMLCanvasElement?.prototype;
+  const offscreenCanvas = globalThis.OffscreenCanvas?.prototype;
+  const drawingContexts = new WeakMap();
   const readPixels = new Map();
+  const supportedCanvas = (canvas, context) => {
+    if (!context || !canvas.width || !canvas.height || canvas.width * canvas.height > 4096 ** 2) return false;
+    if (typeof context.drawImage !== 'function' && typeof context.readPixels !== 'function') return false;
+    const attributes = context.getContextAttributes?.();
+    return (context.drawingBufferColorSpace ?? attributes?.colorSpace ?? 'srgb') === 'srgb' && attributes?.colorType !== 'float16';
+  };
+  if (config.canvasNoise) for (const prototype of [htmlCanvas, offscreenCanvas].filter(Boolean)) {
+    const original = prototype.getContext;
+    prototype.getContext = function getContext(...args) {
+      const context = Reflect.apply(original, this, args);
+      if (context) drawingContexts.set(this, context);
+      return context;
+    };
+  }
   for (const prototype of [canvas2D, offscreen2D].filter(Boolean)) {
     const original = prototype.getImageData;
     readPixels.set(prototype, original);
@@ -45,7 +62,9 @@ function installHardware(config) {
       let x = Math.trunc(Number(args[0]) || 0), y = Math.trunc(Number(args[1]) || 0);
       if (Number(args[2]) < 0) x += Math.trunc(Number(args[2]));
       if (Number(args[3]) < 0) y += Math.trunc(Number(args[3]));
-      pixels(image.data, image.width, image.height, this.canvas.width, this.canvas.height, x, y);
+      if (supportedCanvas(this.canvas, this) && (image.colorSpace ?? 'srgb') === 'srgb') {
+        pixels(image.data, image.width, image.height, this.canvas.width, this.canvas.height, x, y);
+      }
       return image;
     };
   }
@@ -60,19 +79,27 @@ function installHardware(config) {
     context.putImageData(image, 0, 0);
     return copy;
   };
-  if (config.canvasNoise && globalThis.HTMLCanvasElement) {
+  const exportSource = source => {
+    try {
+      return supportedCanvas(source, drawingContexts.get(source)) ? clone(source) : source;
+    } catch {
+      // Let the original export handle tainted/detached canvases and report
+      // errors in the form required by that method (including rejected Promises).
+      return source;
+    }
+  };
+  if (config.canvasNoise && htmlCanvas) {
     for (const method of ['toDataURL', 'toBlob']) {
-      const original = HTMLCanvasElement.prototype[method];
-      HTMLCanvasElement.prototype[method] = function (...args) {
-        return Reflect.apply(original, this.width && this.height ? clone(this) : this, args);
+      const original = htmlCanvas[method];
+      htmlCanvas[method] = function (...args) {
+        return Reflect.apply(original, exportSource(this), args);
       };
     }
   }
-  if (config.canvasNoise && globalThis.OffscreenCanvas) {
-    const original = OffscreenCanvas.prototype.convertToBlob;
-    OffscreenCanvas.prototype.convertToBlob = function (...args) {
-      const copy = this.width && this.height ? clone(this) : this;
-      return Reflect.apply(original, copy, args);
+  if (config.canvasNoise && offscreenCanvas) {
+    const original = offscreenCanvas.convertToBlob;
+    offscreenCanvas.convertToBlob = function convertToBlob(...args) {
+      return Reflect.apply(original, exportSource(this), args);
     };
   }
   for (const prototype of [globalThis.WebGLRenderingContext?.prototype, globalThis.WebGL2RenderingContext?.prototype].filter(Boolean)) {
@@ -90,7 +117,7 @@ function installHardware(config) {
     prototype.readPixels = function (...args) {
       const result = Reflect.apply(original, this, args);
       const [x, y, width, height, format, type, destination, offset = 0] = args;
-      if (format === 6408 && type === 5121 && ArrayBuffer.isView(destination) && destination.BYTES_PER_ELEMENT === 1) {
+      if (format === 6408 && type === 5121 && ArrayBuffer.isView(destination) && destination.BYTES_PER_ELEMENT === 1 && supportedCanvas(this.canvas, this)) {
         const alignment = Reflect.apply(getParameter, this, [3333]);
         const rowLength = globalThis.WebGL2RenderingContext && this instanceof WebGL2RenderingContext ? Reflect.apply(getParameter, this, [3330]) || width : width;
         const stride = Math.ceil(rowLength * 4 / alignment) * alignment;

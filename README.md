@@ -65,7 +65,11 @@ CIKE 是基于 Electron、Chromium 和 Playwright 的本地多环境浏览器。
 
 桌面首次启动会迁移凭据保护和权限。macOS可能请求钥匙串访问许可；由于当前应用使用ad-hoc签名，重新构建或升级后也可能再次提示，CIKE不会自动批准系统授权。请先关闭旧版并备份数据目录；旧版不能读取新加密格式，回退需要升级前备份。系统安全存储不可用时桌面版报错，不会降级保存明文。独立Node API没有Electron安全存储，使用0600文件保存密码，并拒绝读取桌面加密文件；请使用单独的 `LFB_DATA` 目录。
 
-代理检测会经所选代理访问 `https://api.ipify.org` 和 `https://ipwho.is/<出口IP>`，服务可见该出口地址。检测服务不可用也会阻止代理环境启动；手动指定语言与时区可避免对地区信息的依赖，但仍需通过连接检测。
+代理检测经所选路由分别访问 `https://api.ipify.org` 和 `https://api6.ipify.org`，检测到任一地址即可确认连接。地区信息通过 `https://ipwho.is/<出口IP>` 查询，优先使用 IPv4，只有 IPv6 时使用 IPv6。两个地址都无法检测时，代理环境停止启动。手动指定语言与时区可避免对地区信息的依赖。
+
+环境运行时，点击「环境管理 → 网站权限」，即可在该环境的 Chromium 或 Firefox 设置里查看、撤销或重置各站点的定位、摄像头和麦克风授权。网站定位权限应单独核对，检测页显示的出口地区来自公网 IP。
+
+Chromium 环境保留内核默认的第三方存储分区、HTTPS 自动升级、客户端钓鱼检测和组件更新策略。
 
 ## v0.5.16 下载修复
 
@@ -212,6 +216,7 @@ socks5://用户名:密码@host:port
 | `POST /api/proxies/parse` | 解析整行代理文本 |
 | `PUT /api/profiles/:id/proxy` | 修改单个环境的代理 |
 | `POST /api/profiles/:id/checkProxy` | 检测单个环境代理并更新出口信息 |
+| `POST /api/profiles/:id/sitePermissions` | 在正在运行的桌面环境中打开内核的网站权限设置 |
 | `POST /api/openBrowser`、`POST /api/closeBrowser` | 打开、关闭环境浏览器 |
 | `GET /api/checkOpen`、`GET /api/openedList` | 查询运行状态 |
 | `GET /api/settings`、`PATCH /api/settings` | 查询、保存 SOCKS5 系统代理开关 |

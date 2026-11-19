@@ -6,13 +6,56 @@ const { EventEmitter } = require('node:events');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const vm = require('node:vm');
 const { ProfileStore } = require('../src/store');
 const { HOST_PLATFORM, buildContextOptions } = require('../src/fingerprint');
 const { GPU_PRESETS, generateHardware, hardwareConfig, hardwareOptions, isGpuPresetAllowed } = require('../src/hardware');
 const { installHardwareContext } = require('../src/hardware-runtime');
+const { hardwareScript } = require('../src/hardware-script');
 const { nativeConfig } = require('../src/nativecore');
 const { userAgentPresets, resolveUserAgent, isUserAgentAllowed } = require('../src/user-agents');
 const { COUNTRY_LOCALE, LOCALES, TIMEZONES } = require('../src/localemap');
+
+test('canvas exports preserve native rejection and bypass processing for wide gamut and large canvases', async () => {
+  const realm = vm.createContext({ DOMException });
+  vm.runInContext(`
+    class Navigator { get hardwareConcurrency() { return 8; } }
+    globalThis.navigator = new Navigator();
+    globalThis.OffscreenCanvasRenderingContext2D = class {
+      constructor(canvas, options) { this.canvas = canvas; this.options = options; }
+      drawImage(source) { this.canvas.tainted = source.tainted; }
+      getContextAttributes() { return this.options; }
+      getImageData() {
+        if (this.canvas.tainted) throw new DOMException('Tainted canvas', 'SecurityError');
+        return { data: new Uint8ClampedArray([120, 180, 200, 255]), width: 1, height: 1 };
+      }
+      putImageData() {}
+    };
+    globalThis.OffscreenCanvas = class {
+      constructor(width, height) { this.width = width; this.height = height; }
+      getContext(_type, options) { return new OffscreenCanvasRenderingContext2D(this, options); }
+      convertToBlob() {
+        return this.tainted ? Promise.reject(new DOMException('Tainted canvas', 'SecurityError')) : Promise.resolve(this);
+      }
+    };
+    function sample(width, height, options) {
+      const canvas = new OffscreenCanvas(width, height);
+      canvas.getContext('2d', options);
+      return canvas;
+    }
+  `, realm);
+  vm.runInContext(hardwareScript({ hardwareConcurrency: 4, canvasNoise: true, gpu: {}, seed: [1, 2, 3, 4] }), realm);
+  const tainted = vm.runInContext('const canvas = sample(1, 1); canvas.tainted = true; canvas', realm);
+  let pending;
+  assert.doesNotThrow(() => { pending = tainted.convertToBlob(); });
+  await assert.rejects(pending, { name: 'SecurityError' });
+  for (const options of ['1, 1, { colorSpace: "display-p3" }', '1, 1, { colorType: "float16" }', '4097, 4097']) {
+    const canvas = vm.runInContext(`sample(${options})`, realm);
+    assert.equal(await canvas.convertToBlob(), canvas);
+  }
+  const normal = vm.runInContext('sample(1, 1)', realm);
+  assert.notEqual(await normal.convertToBlob(), normal);
+});
 
 test('hardware settings have stable per-profile seeds and preserve explicit choices on edits and restart', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-store-'));

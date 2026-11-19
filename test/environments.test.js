@@ -93,10 +93,11 @@ test('default page reads locally before any opt-in IP fetch and reports failures
   const dir=temp(),store=new ProfileStore(dir),manager=new BrowserManager(store,null,null,{downloadsDirectory:path.join(dir,'downloads')});
   try {
     const p=store.create({name:'<fixture>',locale:'en-US',timezone:'UTC',colorScheme:'dark',reducedMotion:'reduce',forcedColors:'active'});await manager.open(p.id,{headless:true});
-    const context=manager.getContext(p.id);let failed=false,calls=0,geoCalls=0,reported;
+    const context=manager.getContext(p.id);let failed=false,calls=0,ipv6Calls=0,geoCalls=0,reported;
     await context.route('https://api.ipify.org/**',route=>{calls++;return failed?route.abort():route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8'})});});
+    await context.route('https://api6.ipify.org/**',route=>{ipv6Calls++;return failed?route.abort():route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'2001:0db8::8'})});});
     await context.route('https://ipwho.is/**',route=>{geoCalls++;return route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8',country:'Fixture',timezone:{id:'Etc/UTC'},connection:{isp:'Test ISP'}})});});
-    const page=await openStartPage(context,p,{route:'proxy',exitIp:'192.0.2.8'},ip=>reported=ip);
+    const page=await openStartPage(context,p,{route:'proxy',exitIp:'192.0.2.8'},() => addresses => { reported=addresses; });
     assert.equal(await page.locator('#name').innerText(),'<fixture>');
     assert.equal(await page.locator('#ip').innerText(),'尚未检测');
     await page.locator('#browser-values summary').click();
@@ -116,14 +117,18 @@ test('default page reads locally before any opt-in IP fetch and reports failures
     assert.equal(await page.locator('#readout-pdf').innerText(), await page.evaluate(() => navigator.pdfViewerEnabled ? '可用' : '不可用'));
     assert.match(await page.locator('#readout-graphics-mode').innerText(), /原生显卡/);
     assert.equal(await page.locator('#readout-webrtc').innerText(), '限制直连 UDP');
-    assert.equal(calls,0); assert.equal(geoCalls,0); assert.equal(reported,undefined);
+    assert.equal(calls,0); assert.equal(ipv6Calls,0); assert.equal(geoCalls,0); assert.equal(reported,undefined);
     await page.getByRole('button', { name: '检测出口 IP' }).click();
     await page.waitForFunction(()=>document.querySelector('#refresh').disabled===false);
-    assert.equal(await page.locator('#ip').innerText(),'192.0.2.8');assert.equal(reported,'192.0.2.8');
+    assert.equal(await page.locator('#ip').innerText(),'192.0.2.8');
+    assert.equal(await page.locator('#ip-v4').innerText(),'192.0.2.8');
+    assert.equal(await page.locator('#ip-v6').innerText(),'2001:db8::8');
+    assert.deepEqual(reported,{exitIp:'192.0.2.8',exitIPv4:'192.0.2.8',exitIPv6:'2001:db8::8'});
     assert.equal(await page.locator('#isp').innerText(),'Test ISP');
     assert.equal(await page.locator('#match').textContent(),'');
-    assert.equal(calls,1); assert.equal(geoCalls,1);
+    assert.equal(calls,1); assert.equal(ipv6Calls,1); assert.equal(geoCalls,1);
     failed=true;await page.locator('#refresh').click();await page.waitForFunction(()=>document.querySelector('#refresh').disabled===false);
     assert.equal(await page.locator('#ip').innerText(),'检测失败');assert.equal(calls,2);
+    assert.deepEqual(reported,{exitIp:null,exitIPv4:null,exitIPv6:null});
   } finally {await manager.closeAll();fs.rmSync(dir,{recursive:true,force:true});}
 });

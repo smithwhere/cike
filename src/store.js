@@ -24,6 +24,7 @@ class ProfileStore {
     this.dataDir = dataDir;
     this.file = path.join(dataDir, 'profiles.json');
     this.codec = credentials(secretStorage);
+    this.networkChecks = new Map();
     privateDirectory(dataDir);
     privateDirectory(path.join(dataDir, 'profiles'));
     this.profiles = readJSON(this.file, {});
@@ -108,13 +109,14 @@ class ProfileStore {
     if (Object.hasOwn(patch, 'proxyId') || Object.hasOwn(patch, 'proxy')) next.lastNetwork = null;
     this.profiles[id] = next;
     try { this._save(); } catch (error) { this.profiles[id] = old; throw error; }
+    this.networkChecks.delete(id);
     return structuredClone(next);
   }
   recordOpened(id, network) {
     const p = this.get(id);
     if (!p) throw new Error('环境不存在');
     if (p.deleting) throw Object.assign(new Error('环境正在等待清理'), { status: 409 });
-    this.profiles[id] = { ...p, lastOpenedAt: new Date().toISOString(), lastNetwork: network };
+    this.profiles[id] = { ...p, lastOpenedAt: new Date().toISOString(), ...(network ? { lastNetwork: network } : {}) };
     try { this._save(); } catch (error) { this.profiles[id] = p; throw error; }
   }
   recordNetwork(id, network) {
@@ -123,12 +125,26 @@ class ProfileStore {
     this.profiles[id] = { ...p, lastNetwork: network };
     try { this._save(); } catch (error) { this.profiles[id] = p; throw error; }
   }
+  beginNetworkCheck(id) {
+    const token = Symbol();
+    this.networkChecks.set(id, token);
+    const current = () => this.networkChecks.get(id) === token && !!this.profiles[id] && !this.profiles[id].deleting;
+    return {
+      current,
+      save: network => {
+        if (!current()) return false;
+        this.recordNetwork(id, network);
+        return true;
+      },
+    };
+  }
   markDeleting(id) {
     const rec = this.get(id);
     if (!rec) return false;
     if (rec.deleting) return true;
     this.profiles[id] = { ...rec, deleting: true };
     try { this._save(); } catch (error) { this.profiles[id] = rec; throw error; }
+    this.networkChecks.delete(id);
     return true;
   }
   remove(id) {

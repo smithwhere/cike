@@ -44,11 +44,15 @@ test('a delayed window component never closes the SOCKS5 browser, reconnects, an
             data = data.subarray(3 + n + m); socket.write(Buffer.from([1, accepted ? 0 : 1])); if (!accepted) { socket.end(); return; } stage++;
           } else {
             if (data.length < 5) return;
-            const n = data[4]; if (data[3] !== 3 || data.length < 7 + n) return;
-            const host = data.subarray(5, 5 + n).toString(), port = data.readUInt16BE(5 + n);
+            const type = data[3], start = type === 3 ? 5 : 4;
+            const n = type === 3 ? data[4] : type === 1 ? 4 : 16;
+            if (data.length < start + n + 2) return;
+            const address = data.subarray(start, start + n);
+            const host = type === 3 ? address.toString() : type === 1 ? [...address].join('.') : address.toString('hex');
+            const port = data.readUInt16BE(start + n);
             destinations.push({ host, port });
             if (port !== target.address().port) { socket.end(Buffer.from([5, 5, 0, 1, 127, 0, 0, 1, 0, 0])); return; }
-            const tail = data.subarray(7 + n); socket.off('data', receive);
+            const tail = data.subarray(start + n + 2); socket.off('data', receive);
             const upstream = net.connect(fixture.address().port, '127.0.0.1', () => {
               socket.write(Buffer.from([5, 0, 0, 1, 127, 0, 0, 1, 0, 0])); if (tail.length) upstream.write(tail);
               socket.pipe(upstream); upstream.pipe(socket);

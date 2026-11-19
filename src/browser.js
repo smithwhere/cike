@@ -8,7 +8,8 @@ const { chromium } = require('playwright');
 const { buildContextOptions, webrtcArgs, validateProfile } = require('./fingerprint');
 const { resolveProxy } = require('./proxyconfig');
 const { ProxyStore } = require('./proxystore');
-const { checkProxy, prepareProxyRoute } = require('./proxycheck');
+const { checkProxy, prepareProxyRoute, openProxyTransport, exitAddresses } = require('./proxycheck');
+const { chromiumBrowsingSwitches } = require('./chromium-browsing');
 const { privateDirectory } = require('./privatefiles');
 const { prepareDownloads, configureDownloads } = require('./downloads');
 const { WindowStateManager } = require('./windowstate');
@@ -79,9 +80,10 @@ class BrowserManager {
     if (this.sessions.has(id)) return { profile_id: id, open: true, reused: true, ...this.listOpen().find(s => s.profile_id === id) };
     validateProfile(profile);
     const checkCancelled = () => { if (this.cancelled.has(id)) throw Object.assign(new Error('环境启动已取消'), { status: 409 }); };
+    const networkCheck = this.store.beginNetworkCheck(id);
     const savedProxy = profile.proxyId ? this.proxyStore?.beginCheck(profile.proxyId) : null;
     const route = await prepareProxyRoute(savedProxy?.proxy ?? resolveProxy(profile, this.proxyStore), this.settings);
-    const { proxy: proxyRecord, systemProxy } = route;
+    const { proxy: proxyRecord } = route;
     const checkRoute = () => {
       checkCancelled();
       route.assertCurrent();
@@ -94,27 +96,7 @@ class BrowserManager {
     };
     checkRoute();
     const effective = { ...profile };
-    let network = { route: proxyRecord ? 'proxy' : 'system', exitIp: null };
-    if (proxyRecord) {
-      const result = await this.checkProxy(proxyRecord, this.settings, route);
-      checkRoute();
-      savedProxy?.save(result);
-      if (result.status !== 'ok') throw Object.assign(new Error(result.error || '代理连接失败，已阻止启动'), { status: 502 });
-      if (profile.timezone === 'auto') {
-        if (!result.timezone) throw Object.assign(new Error('代理出口时区未知，请重新检测或手动选择时区；不会回退到本机时区'), { status: 409 });
-        effective.timezone = result.timezone;
-      }
-      if (profile.locale === 'auto') {
-        const { localeForCountry } = require('./localemap');
-        if (!result.countryCode) throw Object.assign(new Error('代理出口地区未知，请重新检测或手动选择语言'), { status: 409 });
-        effective.locale = localeForCountry(result.countryCode);
-        if (!effective.locale) throw Object.assign(new Error('没有此代理地区的语言映射，请手动选择语言'), { status: 409 });
-      }
-      network = { route: 'proxy', exitIp: result.exitIp, checkedAt: new Date().toISOString(), timezone: effective.timezone, locale: effective.locale };
-    }
-    // With no configured proxy, auto means native system locale/timezone;
-    // no geolocation request, and no invented America/New_York fallback.
-    let proxy = proxyRecord ? ProxyStore.toPlaywright(proxyRecord) : null;
+    let network = { route: proxyRecord ? 'proxy' : 'system', ...exitAddresses({}) };
     let forwarder, context, windowToken, windowBridge, windowControl, graphicsMode, graphicsFallback = false;
     const trackContext = launched => {
       this.contexts.set(id, launched);
@@ -124,19 +106,38 @@ class BrowserManager {
       launched.once('close', () => { if (!process || process.exitCode != null || process.signalCode != null) forget(); });
     };
     try {
-      if (proxyRecord?.type === 'socks5' && (proxyRecord.username || proxyRecord.password || systemProxy)) {
-        const { SocksForwarder } = require('./socksfwd');
-        forwarder = await SocksForwarder.start({ ...proxyRecord, systemProxy });
-        proxy = { server: `http://127.0.0.1:${forwarder.port}`, bypass: '<-loopback>' };
-      } else if (proxy) proxy.bypass = '<-loopback>';
+      const transport = await openProxyTransport(route);
+      forwarder = transport.forwarder;
+      checkRoute();
+      if (proxyRecord) {
+        const result = await this.checkProxy(proxyRecord, this.settings, route, transport);
+        checkRoute();
+        savedProxy?.save(result);
+        if (result.status !== 'ok') throw Object.assign(new Error(result.error || '代理连接失败，已阻止启动'), { status: 502 });
+        if (profile.timezone === 'auto') {
+          if (!result.timezone) throw Object.assign(new Error('代理出口时区未知，请重新检测或手动选择时区；不会回退到本机时区'), { status: 409 });
+          effective.timezone = result.timezone;
+        }
+        if (profile.locale === 'auto') {
+          const { localeForCountry } = require('./localemap');
+          if (!result.countryCode) throw Object.assign(new Error('代理出口地区未知，请重新检测或手动选择语言'), { status: 409 });
+          effective.locale = localeForCountry(result.countryCode);
+          if (!effective.locale) throw Object.assign(new Error('没有此代理地区的语言映射，请手动选择语言'), { status: 409 });
+        }
+        network = { route: 'proxy', ...exitAddresses(result), checkedAt: new Date().toISOString(), timezone: effective.timezone, locale: effective.locale };
+      }
+      const proxy = ProxyStore.toPlaywright(transport.proxy);
+      if (proxy) proxy.bypass = '<-loopback>';
       const kernel = profile.fingerprintMode === 'kernel';
       if (kernel && process.env.LFB_EXPOSE_DEBUGGER === '1') throw new Error('Camoufox 使用 Firefox 协议，不提供 Chromium CDP 调试端口');
       const { options, display } = buildContextOptions({ ...effective, proxy });
       const manageWindows = !display && !headless && process.platform === 'win32' && !kernel;
       const debugPort = !kernel && process.env.LFB_EXPOSE_DEBUGGER === '1' ? await findFreePort(4550, 4599) : null;
+      const switches = kernel ? null : await chromiumBrowsingSwitches(chromium);
       const launchOptions = { ...options, headless, chromiumSandbox: true,
-        ignoreDefaultArgs: ['--enable-automation'],
+        ignoreDefaultArgs: switches?.ignoreDefaultArgs,
         args: ['--no-first-run', '--no-default-browser-check', '--site-per-process', '--disable-background-mode',
+          ...(switches?.args || []),
           '--disable-blink-features=AutomationControlled',
           ...(!kernel && effective.userAgent ? [`--user-agent=${effective.userAgent}`] : []),
           ...(effective.locale !== 'auto' ? [`--lang=${effective.locale}`, `--accept-lang=${effective.locale}`] : []),
@@ -230,14 +231,17 @@ class BrowserManager {
       }); };
       context.on('page', watchPage);
       for (const page of context.pages()) watchPage(page);
-      if (!headless && this.startPage) await require('./startpage').openStartPage(context, profile, network, ip => {
-        if (this.sessions.get(id) !== session) return;
-        session.network = { ...session.network, exitIp: ip, checkedAt: new Date().toISOString() };
-        this.store.recordNetwork(id, session.network);
+      if (!headless && this.startPage) await require('./startpage').openStartPage(context, profile, network, () => {
+        const check = this.store.beginNetworkCheck(id);
+        return addresses => {
+          if (this.sessions.get(id) !== session) return;
+          const observed = { ...session.network, ...addresses, checkedAt: new Date().toISOString() };
+          if (check.save(observed)) session.network = observed;
+        };
       }, graphicsMode);
       checkCancelled();
       if (graphicsFallback) this.settings?.rememberCamoufoxSoftware();
-      this.store.recordOpened(id, session.network);
+      this.store.recordOpened(id, networkCheck.current() ? session.network : null);
       const warning = [graphicsFallback ? '检测到 GPU/D3D11 启动失败，已自动使用兼容绘制' : null, this.windowWarning(id)].filter(Boolean).join('；');
       return { profile_id: id, open: true, reused: false, headless, network,
         ...(graphicsMode ? { graphicsMode } : {}),
@@ -279,6 +283,23 @@ class BrowserManager {
     return { closed: ids.length };
   }
   getContext(id) { return this.sessions.get(id)?.context || null; }
+  async openSitePermissions(id) {
+    const profile = this.store.get(id);
+    if (!profile) throw Object.assign(new Error('环境不存在'), { status: 404 });
+    const session = this.sessions.get(id);
+    if (!session || session.headless || profile.deleting || this.closing.has(id)) {
+      throw Object.assign(new Error('请先打开此环境，再管理网站权限'), { status: 409 });
+    }
+    const url = profile.fingerprintMode === 'kernel' ? 'about:preferences#privacy' : 'chrome://settings/content';
+    const page = await session.context.newPage();
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.bringToFront();
+    } catch (error) {
+      await page.close().catch(() => {});
+      throw new Error('无法打开网站权限页面，请从此环境的浏览器设置进入', { cause: error });
+    }
+  }
   async forceStopAll() {
     await Promise.allSettled([...this.contexts.values()].map(context => forceStopContext(context)));
   }

@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { SocksForwarder } = require('../src/socksfwd');
+const { connectSocks } = require('../src/proxyroute');
 const { curl } = require('../src/proxycheck');
 const { ProfileStore } = require('../src/store');
 const { BrowserManager } = require('../src/browser');
@@ -77,6 +78,43 @@ test('curl forces selected proxy despite NO_PROXY and keeps authentication out o
     assert.equal(await curl({ type: 'http', host: '127.0.0.1', port: proxy.address().port, username: 'fixture', password: 'secret' }, 'http://unresolvable.invalid'), 'via proxy');
     assert.equal(auth, 'Basic ' + Buffer.from('fixture:secret').toString('base64'));
   } finally { if (old === undefined) delete process.env.NO_PROXY; else process.env.NO_PROXY = old; await close(proxy); }
+});
+
+test('SOCKS5 sends IPv4, IPv6 and DNS destinations in their own wire types', async () => {
+  const packets = [];
+  const sockets = new Set();
+  const proxy = net.createServer(socket => {
+    sockets.add(socket);
+    socket.on('error', () => {});
+    socket.once('close', () => sockets.delete(socket));
+    let greeting = true, data = Buffer.alloc(0);
+    socket.on('data', chunk => {
+      data = Buffer.concat([data, chunk]);
+      if (greeting) {
+        if (data.length < 3) return;
+        greeting = false;
+        data = data.subarray(3);
+        socket.write(Buffer.from([5, 0]));
+        return;
+      }
+      if (data.length < 5) return;
+      const length = data[3] === 1 ? 10 : data[3] === 4 ? 22 : 7 + data[4];
+      if (data.length < length) return;
+      packets.push(data.subarray(3, length));
+      socket.write(Buffer.from([5, 0, 0, 1, 127, 0, 0, 1, 0, 0]));
+    });
+  });
+  await listen(proxy);
+  try {
+    for (const destination of ['192.0.2.7', '2001:db8::1', '::ffff:192.0.2.7', 'unresolvable.invalid']) {
+      const socket = await connectSocks({ host: '127.0.0.1', port: proxy.address().port }, destination, 443);
+      socket.destroy();
+    }
+    assert.deepEqual(packets.map(packet => packet.toString('hex')), [
+      '01c000020701bb', '0420010db800000000000000000000000101bb',
+      '0400000000000000000000ffffc000020701bb', '0314756e7265736f6c7661626c652e696e76616c696401bb',
+    ]);
+  } finally { for (const socket of sockets) socket.destroy(); await close(proxy); }
 });
 
 test('browser has no direct HTTP fallback when proxy closes and sends no local STUN UDP under restricted policy', { timeout: 45000 }, async () => {

@@ -1,14 +1,15 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const net = require('net');
+const { randomUUID } = require('crypto');
+const { exitAddresses } = require('./proxycheck');
 const ORIGIN = 'https://start.cike.invalid';
-async function openStartPage(context, profile, network, onResult, graphicsMode) {
+async function openStartPage(context, profile, network, beginCheck, graphicsMode) {
   const page = context.pages()[0] || await context.newPage();
   const root = path.join(__dirname, '..', 'electron', 'start');
   const software = profile.fingerprintMode === 'hardware';
   const config = {
-    name: profile.name, sequence: profile.sequence, proxy: network.route === 'proxy', expectedIp: network.exitIp,
+    name: profile.name, sequence: profile.sequence, proxy: network.route === 'proxy', expected: exitAddresses(network),
     mode: profile.fingerprintMode, canvasProcessing: software && profile.canvasNoise === true,
     browserVersion: context.browser()?.version() || null,
     gpuPreset: require('./hardware').GPU_PRESETS[profile.gpuPreset]?.name || '原生显卡',
@@ -18,16 +19,24 @@ async function openStartPage(context, profile, network, onResult, graphicsMode) 
   const assets = { '/': ['index.html', 'text/html'], '/start.js': ['start.js', 'text/javascript'], '/start.css': ['start.css', 'text/css'] };
   // A reserved .invalid origin is fulfilled only inside this page. No local
   // API token, proxy password, listening port or browser-wide JS binding.
+  let pendingCheck;
   await page.route(ORIGIN + '/**', async route => {
     const req = route.request(), url = new URL(req.url());
-    const headers = { 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.ipify.org https://ipwho.is; frame-ancestors 'none'" };
-    if (url.pathname === '/result' && req.method() === 'POST') {
+    const headers = { 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.ipify.org https://api6.ipify.org https://ipwho.is; frame-ancestors 'none'" };
+    if (['/check', '/result'].includes(url.pathname) && req.method() === 'POST') {
       if (req.headers().origin !== ORIGIN || page.url() !== ORIGIN + '/') return route.fulfill({ status: 403, body: '' });
+      if (url.pathname === '/check') {
+        pendingCheck = { id: randomUUID(), finish: beginCheck() };
+        return route.fulfill({ headers, json: { id: pendingCheck.id } });
+      }
       try {
         const data = req.postDataJSON();
-        if (!net.isIP(data.ip)) throw new Error('Invalid IP');
-        onResult(data.ip);
-        return route.fulfill({ status: 204, body: '' });
+        if (!pendingCheck || pendingCheck.id !== data.id) return route.fulfill({ status: 409, body: '' });
+        const { finish } = pendingCheck;
+        pendingCheck = null;
+        const addresses = exitAddresses({ exitIPv4: data.exitIPv4, exitIPv6: data.exitIPv6 });
+        finish(addresses);
+        return route.fulfill({ headers, json: addresses });
       } catch { return route.fulfill({ status: 400, body: '' }); }
     }
     if (req.method() !== 'GET') return route.fulfill({ status: 405, body: '' });

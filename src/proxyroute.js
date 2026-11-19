@@ -73,29 +73,47 @@ function buffered(socket) {
   };
 }
 
+function socksAddress(host) {
+  switch (net.isIP(host)) {
+    case 4:
+      return Buffer.from([1, ...host.split('.').map(Number)]);
+    case 6: {
+      const address = new URL(`http://[${host}]/`).hostname.slice(1, -1);
+      const [left, right] = address.split('::').map(part => part ? part.split(':') : []);
+      const groups = right ? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right] : left;
+      const encoded = Buffer.alloc(17, 0);
+      encoded[0] = 4;
+      groups.forEach((group, index) => encoded.writeUInt16BE(parseInt(group, 16), 1 + index * 2));
+      return encoded;
+    }
+    default: {
+      const name = Buffer.from(host);
+      if (name.length > 255) throw new Error('SOCKS5 地址字段过长');
+      return Buffer.concat([Buffer.from([3, name.length]), name]);
+    }
+  }
+}
+
 async function socks(socket, proxy, destination) {
   const io = buffered(socket);
   const timer = setTimeout(() => socket.destroy(new Error('SOCKS5 握手超时')), 15000);
   try {
-    if (Buffer.byteLength(proxy.username || '') > 255 || Buffer.byteLength(proxy.password || '') > 255 || Buffer.byteLength(destination.host) > 255) throw new Error('SOCKS5 字段过长');
-    socket.write(Buffer.from([5, 1, proxy.username || proxy.password ? 2 : 0]));
+    if (Buffer.byteLength(proxy.username || '') > 255 || Buffer.byteLength(proxy.password || '') > 255) throw new Error('SOCKS5 字段过长');
+    const requestedMethod = proxy.username || proxy.password ? 2 : 0;
+    socket.write(Buffer.from([5, 1, requestedMethod]));
     const method = await io.read(2);
     if (method[0] !== 5) throw new Error('SOCKS5 版本无效');
+    if (method[1] !== requestedMethod) throw new Error('SOCKS5 不支持所选认证方式');
     if (method[1] === 2) {
       const user = Buffer.from(proxy.username || '');
       const pass = Buffer.from(proxy.password || '');
       socket.write(Buffer.concat([Buffer.from([1, user.length]), user, Buffer.from([pass.length]), pass]));
       const auth = await io.read(2);
       if (auth[0] !== 1 || auth[1] !== 0) throw new Error('SOCKS5 用户名或密码错误');
-    } else if (method[1] !== 0) {
-      throw new Error('SOCKS5 不支持所选认证方式');
     }
-    const name = Buffer.from(destination.host);
-    const request = Buffer.alloc(7 + name.length);
-    request.set([5, 1, 0, 3, name.length]);
-    name.copy(request, 5);
-    request.writeUInt16BE(destination.port, 5 + name.length);
-    socket.write(request);
+    const port = Buffer.alloc(2);
+    port.writeUInt16BE(destination.port);
+    socket.write(Buffer.concat([Buffer.from([5, 1, 0]), socksAddress(destination.host), port]));
     const reply = await io.read(4);
     if (reply[0] !== 5 || reply[1] !== 0) throw new Error(`SOCKS5 连接失败（${reply[1]}）`);
     if (![1, 3, 4].includes(reply[3])) throw new Error('SOCKS5 地址类型无效');

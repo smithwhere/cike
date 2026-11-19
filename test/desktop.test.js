@@ -233,6 +233,9 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       await kernelCard.locator('[data-act="open"]').click();
       await kernelCard.getByText('运行中', { exact: true }).waitFor({ timeout: 40000 });
       await kernelCard.getByText('兼容绘制', { exact: true }).waitFor();
+      const sitePermissions = page.waitForResponse(item => item.url().endsWith('/sitePermissions'));
+      await kernelCard.getByRole('button', { name: '网站权限' }).click();
+      assert.equal((await sitePermissions).status(), 200);
       await page.locator('[data-page="settings"]').click();
       await page.waitForFunction(() => document.querySelector('#native-storage-notice').textContent.includes('请先关闭'));
       assert.equal(await page.locator('#btn-native-location').isDisabled(), true);
@@ -244,7 +247,7 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     }
     const generated = [];
     for (let i = 0; i < 2; i++) {
-      await page.getByRole('button', { name: '新建环境', exact: true }).click();
+      await page.getByRole('button', { name: '新建独立环境', exact: true }).click();
       assert.equal(await page.locator('#n-fingerprint-mode').inputValue(), 'random');
       const created = page.waitForResponse(response => response.url().endsWith('/api/profiles') && response.request().method() === 'POST');
       if (process.env.LFB_CHROMIUM_EXECUTABLE) {
@@ -259,6 +262,9 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       if (process.env.LFB_CHROMIUM_EXECUTABLE) {
         const card = page.locator('.env-card').filter({ has: page.getByText(String(fresh.sequence), { exact: true }) });
         await card.getByText('运行中', { exact: true }).waitFor({ timeout: 30000 });
+        const permissions = page.waitForResponse(item => item.url().endsWith(`/api/profiles/${fresh.id}/sitePermissions`));
+        await card.getByRole('button', { name: '网站权限' }).click();
+        assert.equal((await permissions).status(), 200);
         await card.locator('[data-act="close"]').click();
         await card.getByText('已关闭', { exact: true }).waitFor();
       }

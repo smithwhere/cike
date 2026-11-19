@@ -28,7 +28,7 @@ function curl(proxy, url, timeoutMs = 12000) {
       ? '无法启动系统 curl；Windows 需要 Windows 10 1803 或更新版本自带的 curl.exe' : '无法启动系统 curl')); });
     child.once('close', code => {
       clearTimeout(timer);
-      if (code || tooLarge) reject(new Error(`代理请求失败（curl ${code ?? 'timeout'}）；请检查连接、认证和证书`));
+      if (code !== 0 || tooLarge) reject(new Error(`代理请求失败（curl ${code ?? 'timeout'}）；请检查连接、认证和证书`));
       else resolve(output.trim());
     });
     child.stdin.end(config);
@@ -54,33 +54,55 @@ async function prepareProxyRoute(proxy, settings) {
   return { proxy: selected, systemProxy: proxy ? upstream : null, assertCurrent };
 }
 
-async function checkProxy(proxy, settings, preparedRoute) {
-  let forwarder;
+async function openProxyTransport(route) {
+  const { proxy, systemProxy } = route;
+  if (proxy?.type !== 'socks5' || !(proxy.username || proxy.password || systemProxy)) return { proxy };
+  const forwarder = await SocksForwarder.start({ ...proxy, systemProxy });
+  return { proxy: { type: 'http', host: '127.0.0.1', port: forwarder.port }, forwarder };
+}
+
+function normalizeIp(value, family) {
+  if (typeof value !== 'string' || net.isIP(value) !== family) return null;
+  if (family === 4) return value;
+  try { return new URL(`http://[${value}]/`).hostname.slice(1, -1); } catch { return null; }
+}
+
+function exitAddresses({ exitIp, exitIPv4, exitIPv6 }) {
+  const ipv4 = normalizeIp(exitIPv4 ?? exitIp, 4);
+  const ipv6 = normalizeIp(exitIPv6 ?? exitIp, 6);
+  return { exitIp: ipv4 || ipv6, exitIPv4: ipv4, exitIPv6: ipv6 };
+}
+
+async function readProxyNetwork(proxy, request = curl) {
+  const probes = await Promise.allSettled([
+    request(proxy, 'https://api.ipify.org'), request(proxy, 'https://api6.ipify.org'),
+  ]);
+  const addresses = exitAddresses({ exitIPv4: probes[0].value, exitIPv6: probes[1].value });
+  const { exitIp } = addresses;
+  if (!exitIp) throw probes.find(probe => probe.status === 'rejected')?.reason || new Error('代理 IP 检测响应无效');
+  let country = null, countryCode = null, timezone = null;
+  try {
+    const geo = JSON.parse(await request(proxy, `https://ipwho.is/${encodeURIComponent(exitIp)}`));
+    if (geo.success !== false && normalizeIp(geo.ip, net.isIP(exitIp)) === exitIp) {
+      country = typeof geo.country === 'string' ? geo.country : null;
+      countryCode = /^[A-Z]{2}$/.test(geo.country_code) ? geo.country_code : null;
+      timezone = typeof geo.timezone?.id === 'string' ? geo.timezone.id : null;
+      if (timezone) new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
+    }
+  } catch { timezone = null; }
+  return { ...addresses, country, countryCode, timezone };
+}
+
+async function checkProxy(proxy, settings, preparedRoute, transport) {
+  let ownedTransport;
   try {
     validateProxy(proxy);
     const route = preparedRoute ?? await prepareProxyRoute(proxy, settings);
     route.assertCurrent();
-    let effective = proxy;
-    if (route.systemProxy) {
-      forwarder = await SocksForwarder.start({ ...proxy, systemProxy: route.systemProxy });
-      effective = { type: 'http', host: '127.0.0.1', port: forwarder.port };
-    }
-    // Both endpoints are HTTPS and always use exactly the selected route.
-    const exitIp = await curl(effective, 'https://api.ipify.org');
-    if (!net.isIP(exitIp)) throw new Error('代理 IP 检测响应无效');
-    let country = null, countryCode = null, timezone = null;
-    try {
-      const geo = JSON.parse(await curl(effective, `https://ipwho.is/${encodeURIComponent(exitIp)}`));
-      if (geo.success !== false && geo.ip === exitIp) {
-        country = typeof geo.country === 'string' ? geo.country : null;
-        countryCode = /^[A-Z]{2}$/.test(geo.country_code) ? geo.country_code : null;
-        timezone = geo.timezone?.id || null;
-        if (timezone) new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
-      }
-    } catch { timezone = null; }
-    return { status: 'ok', exitIp, country, countryCode, timezone };
+    if (!transport) transport = ownedTransport = await openProxyTransport(route);
+    return { status: 'ok', ...(await readProxyNetwork(transport.proxy)) };
   } catch (error) {
-    return { status: 'failed', exitIp: null, country: null, countryCode: null, timezone: null, error: error.message };
-  } finally { await forwarder?.stop(); }
+    return { status: 'failed', ...exitAddresses({}), country: null, countryCode: null, timezone: null, error: error.message };
+  } finally { await ownedTransport?.forwarder?.stop(); }
 }
-module.exports = { checkProxy, prepareProxyRoute, curl };
+module.exports = { checkProxy, prepareProxyRoute, openProxyTransport, readProxyNetwork, exitAddresses, curl };

@@ -14,22 +14,41 @@ async function getJSON(url) {
   if (!response.ok) throw new Error('检测服务暂时不可用');
   return response.json();
 }
+async function submitCheck(path, data) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data), signal: AbortSignal.timeout(5000) });
+  if (!response.ok) throw new Error('检测记录未更新');
+  return response.json();
+}
+function canonicalIp(ip) {
+  if (typeof ip !== 'string') return null;
+  if (!ip.includes(':')) return ip;
+  try { return new URL(`http://[${ip}]/`).hostname.slice(1, -1); } catch { return null; }
+}
 async function detect() {
   const button = document.getElementById('refresh'); button.disabled = true;
-  text('ip', '检测中…'); text('status', '通过当前环境的网络连接检测');
+  for (const id of ['ip', 'ip-v4', 'ip-v6']) text(id, '检测中…');
+  text('status', '通过当前环境的网络连接检测');
   for (const id of ['region', 'exit-timezone', 'isp']) text(id, '等待检测');
   document.getElementById('match').textContent = '';
   try {
-    const { ip } = await getJSON('https://api.ipify.org?format=json');
-    if (typeof ip !== 'string' || !/^[0-9a-fA-F.:]{3,45}$/.test(ip)) throw new Error('IP 检测响应无效');
-    const recorded = await fetch('/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ip }) });
-    if (!recorded.ok) throw new Error('IP 检测响应无效');
+    const { id } = await submitCheck('/check', {});
+    const probes = await Promise.allSettled([
+      getJSON('https://api.ipify.org?format=json'), getJSON('https://api6.ipify.org?format=json'),
+    ]);
+    const { exitIp: ip, exitIPv4, exitIPv6 } = await submitCheck('/result', {
+      id, exitIPv4: probes[0].value?.ip, exitIPv6: probes[1].value?.ip,
+    });
+    text('ip-v4', exitIPv4 || '未检测到'); text('ip-v6', exitIPv6 || '未检测到');
+    if (!ip) throw new Error('未检测到出口');
     text('ip', ip); text('status', '检测成功 · ' + new Date().toLocaleTimeString());
     const notices = [];
-    if (config.expectedIp && config.expectedIp !== ip) notices.push(`当前出口与启动前检测的 ${config.expectedIp} 不同，请检查代理是否使用动态出口。`);
+    for (const [family, actual, expected] of [['IPv4', exitIPv4, config.expected.exitIPv4], ['IPv6', exitIPv6, config.expected.exitIPv6]]) {
+      if (actual && expected && actual !== expected) notices.push(`${family} 出口与启动前检测的 ${expected} 不同，请检查代理是否使用动态出口。`);
+    }
     try {
       const geo = await getJSON('https://ipwho.is/' + encodeURIComponent(ip));
-      if (geo.success === false || geo.ip !== ip) throw new Error('地区未知');
+      if (geo.success === false || canonicalIp(geo.ip) !== ip) throw new Error('地区未知');
       text('region', [geo.country, geo.region, geo.city].filter(Boolean).join(' · '));
       text('exit-timezone', geo.timezone?.id); text('isp', geo.connection?.isp);
       if (geo.timezone?.id && canonicalTimezone(geo.timezone.id) !== canonicalTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)) {
@@ -37,7 +56,10 @@ async function detect() {
       }
     } catch { for (const id of ['region', 'exit-timezone', 'isp']) text(id, '地区服务暂不可用'); }
     document.getElementById('match').textContent = notices.join(' ');
-  } catch { text('ip', '检测失败'); text('status', '请检查网络或代理后重新检测；不会切换为直连。'); }
+  } catch {
+    for (const id of ['ip-v4', 'ip-v6']) if (document.getElementById(id).textContent === '检测中…') text(id, '未检测到');
+    text('ip', '检测失败'); text('status', '请检查网络或代理后重新检测；不会切换为直连。');
+  }
   finally { button.disabled = false; }
 }
 document.getElementById('refresh').onclick = detect;
