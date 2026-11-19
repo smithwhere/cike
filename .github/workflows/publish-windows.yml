@@ -8,7 +8,7 @@ name: Publish Windows Release
         type: string
         required: true
       tag:
-        description: Windows release tag, for example v0.11
+        description: Windows release tag matching the app version, for example v0.11.0
         type: string
         required: true
 
@@ -42,9 +42,8 @@ jobs:
             const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
             const tag = process.env.RELEASE_TAG;
             if (!/^\d+$/.test(process.env.SOURCE_RUN)) throw new Error('Invalid build run ID');
-            const match = /^(\d+\.\d+)\.0$/.exec(version);
-            if (!match || tag !== `v${match[1]}`) {
-              throw new Error('Use vMAJOR.MINOR to match package version MAJOR.MINOR.0');
+            if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) || tag !== `v${version}`) {
+              throw new Error('Use vMAJOR.MINOR.PATCH to match the application version');
             }
             const { data: run } = await github.rest.actions.getWorkflowRun({
               ...context.repo, run_id: Number(process.env.SOURCE_RUN),
@@ -60,7 +59,7 @@ jobs:
               if (!existing.draft) throw new Error('This release is already published');
             } catch (error) { if (error.status !== 404) throw error; }
             core.setOutput('sha', run.head_sha);
-            core.setOutput('filename', `CIKE-${match[1]}-windows-x64.zip`);
+            core.setOutput('filename', `CIKE-${version}-windows-x64.zip`);
             core.setOutput('build_url', run.html_url);
       - name: Confirm the artifact matches the application source
         env:

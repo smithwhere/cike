@@ -43,8 +43,7 @@ async function main() {
     '详细说明、已验证范围与实机验收清单见 Windows使用说明.md。',
     '',
   ].join('\r\n'));
-  const archiveVersion = manifest.version.replace(/^(\d+\.\d+)\.0$/, '$1');
-  const filename = `CIKE-${archiveVersion}-windows-x64.zip`;
+  const filename = `CIKE-${manifest.version}-windows-x64.zip`;
   const archive = path.join(out, filename);
   await zipDirectory(directory, archive);
   const hash = crypto.createHash('sha256');
