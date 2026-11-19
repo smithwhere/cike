@@ -127,6 +127,10 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     if (process.platform === 'win32') {
       assert.equal(await page.locator('#f-display-preset').inputValue(), '3k2');
       assert.equal(await page.locator('#f-display-scale').inputValue(), '250');
+      // The permissions checks open this profile on Windows runners with smaller desktops.
+      await page.locator('details.advanced > summary').filter({ hasText: '指纹选项' }).click();
+      await page.locator('#f-display-preset').selectOption('hd720');
+      await page.locator('#f-display-scale').selectOption('225');
     }
     assert.equal(await page.locator('#f-convert').count(), 0);
     const updatedProfile = page.waitForResponse(response => response.url().includes('/api/profiles/' + created.id) && response.request().method() === 'PATCH');
@@ -206,7 +210,10 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       assert.ok(await card.locator('.environment-number').isVisible());
       if (process.env.LFB_CHROMIUM_EXECUTABLE) {
         const newCard = page.locator('.env-card').filter({ has: page.locator('.name', { hasText: /^2$/ }) });
+        const opened = page.waitForResponse(response => response.url().endsWith('/api/openBrowser') && response.request().method() === 'POST');
         await newCard.locator('[data-act="open"]').click();
+        const openResponse = await opened;
+        assert.equal(openResponse.status(), 200, await openResponse.text());
         await newCard.getByText('运行中', { exact: true }).waitFor({ timeout: 30000 });
         assert.ok(JSON.parse(fs.readFileSync(profiles.file))[Object.keys(JSON.parse(fs.readFileSync(profiles.file))).find(id => id !== p.id)].lastOpenedAt);
         await newCard.locator('[data-act="close"]').click();
@@ -233,6 +240,7 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.locator('#n-hardware-cpu').selectOption('4');
     assert.equal(await page.locator('#n-hardware-gpu option').count(), 1);
     assert.equal(await page.locator('#n-hardware-gpu').inputValue(), 'native');
+    if (process.platform === 'win32') await page.locator('#n-display-preset').selectOption('');
     const kernelCreated = page.waitForResponse(response => response.url().endsWith('/api/profiles') && response.request().method() === 'POST');
     await page.locator('#n-save').click();
     assert.equal((await kernelCreated).status(), 200);
@@ -240,7 +248,10 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.equal(kernel.hardwareConcurrency, 4); assert.equal(kernel.deviceMemory, null); assert.equal(kernel.canvasNoise, false); assert.equal(kernel.audioNoise, false);
     const kernelCard = page.locator('.env-card').filter({ has: page.locator('.name', { hasText: /^3$/ }) });
     if (process.env.CIKE_CAMOUFOX_EXECUTABLE) {
+      const opened = page.waitForResponse(response => response.url().endsWith('/api/openBrowser') && response.request().method() === 'POST');
       await kernelCard.locator('[data-act="open"]').click();
+      const openResponse = await opened;
+      assert.equal(openResponse.status(), 200, await openResponse.text());
       await kernelCard.getByText('运行中', { exact: true }).waitFor({ timeout: 40000 });
       await kernelCard.getByText('兼容绘制', { exact: true }).waitFor();
       const sitePermissions = page.waitForResponse(item => item.url().endsWith('/sitePermissions'));
