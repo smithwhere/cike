@@ -1,5 +1,6 @@
 'use strict';
 const { isUserAgentAllowed } = require('./user-agents');
+const { emulatedDisplay } = require('./display-presets');
 // Native mode preserves Chromium values. Hardware mode is explicit software
 // emulation and must be installed in pages and workers before site scripts.
 const HOST_PLATFORM = { darwin: 'mac', win32: 'win', linux: 'linux' }[process.platform] || 'linux';
@@ -24,9 +25,10 @@ function validateProfile(profile) {
   if (![width, height].every(n => Number.isInteger(n) && n >= 320 && n <= 7680)) bad('窗口尺寸必须在 320–7680 之间');
   if (!(profile.deviceScaleFactor >= 0.5 && profile.deviceScaleFactor <= 4)) bad('无效的缩放比例');
   if (!['light', 'dark', 'no-preference'].includes(profile.colorScheme)) bad('无效的外观设置');
+  return emulatedDisplay(profile.display, profile.platform);
 }
 function buildContextOptions(profile) {
-  validateProfile(profile);
+  const display = validateProfile(profile);
   const options = {
     viewport: profile.viewport,
     deviceScaleFactor: profile.deviceScaleFactor,
@@ -34,6 +36,7 @@ function buildContextOptions(profile) {
     acceptDownloads: true,
     ignoreHTTPSErrors: false,
     bypassCSP: false,
+    ...display,
   };
   if (profile.locale !== 'auto') options.locale = profile.locale;
   if (profile.timezone !== 'auto') options.timezoneId = profile.timezone;
@@ -41,7 +44,7 @@ function buildContextOptions(profile) {
   if (profile.fingerprintMode === 'hardware') options.extraHTTPHeaders = {
     'Device-Memory': String(profile.deviceMemory), 'Sec-CH-Device-Memory': String(profile.deviceMemory),
   };
-  return { options };
+  return { options, display };
 }
 function webrtcArgs(profile) {
   // Proxy profiles always restrict UDP, even if a stale record says default.

@@ -11,7 +11,7 @@ const { resolveUserAgent } = require('./user-agents');
 const DEFAULT_SPEC = {
   name: 'profile', group: '', fingerprintMode: 'native', platform: HOST_PLATFORM,
   userAgent: null, proxyId: null, proxy: null,
-  viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2,
+  viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, display: null,
   locale: 'auto', timezone: 'auto', canvasSeed: null, canvasNoise: false,
   hardwareConcurrency: null, deviceMemory: null, webrtc: 'auto', colorScheme: 'light',
   gpuPreset: 'native', audioNoise: false, fingerprintSeed: null,

@@ -12,7 +12,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function windowFor(context, page) {
   const session = await context.newCDPSession(page);
   const { windowId } = await session.send('Browser.getWindowForTarget');
-  return { session, windowId };
+  return { session, windowId, page };
 }
 async function expectState(control, expected) {
   let state;
@@ -31,6 +31,29 @@ async function newWindow(context, control) {
   const opened = context.waitForEvent('page');
   await control.session.send('Target.createTarget', { url: 'about:blank', newWindow: true });
   return windowFor(context, await opened);
+}
+
+for (const engine of ['Chromium', 'Camoufox']) {
+  const kernel = engine === 'Camoufox';
+  test(`${engine} applies the Windows display preset to the initial page and new window`, {
+    skip: process.platform !== 'win32' || (kernel && !process.env.CIKE_CAMOUFOX_EXECUTABLE), timeout: 90000,
+  }, async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-display-window-'));
+    const store = new ProfileStore(root);
+    const manager = new BrowserManager(store, null, new Settings(root), { startPage: false, downloadsDirectory: path.join(root, 'Downloads') });
+    const expected = { screen: [1536, 864], viewport: [1536, 864], dpr: 1.25 };
+    const metrics = () => ({ screen: [screen.width, screen.height], viewport: [innerWidth, innerHeight], dpr: devicePixelRatio });
+    try {
+      const profile = store.create({ display: { preset: 'fhd', scale: 125 }, ...(kernel ? { fingerprintMode: 'kernel', hardwareConcurrency: 8 } : {}) });
+      await manager.open(profile.id);
+      const context = manager.getContext(profile.id), page = context.pages()[0];
+      assert.deepEqual(await page.evaluate(metrics), expected);
+      const opened = context.waitForEvent('page');
+      if (kernel) await page.evaluate(() => { window.open('about:blank', '_blank', 'popup,width=600,height=500'); });
+      else await (await windowFor(context, page)).session.send('Target.createTarget', { url: 'about:blank', newWindow: true });
+      assert.deepEqual(await (await opened).evaluate(metrics), expected);
+    } finally { await manager.closeAll(); fs.rmSync(root, { recursive: true, force: true }); }
+  });
 }
 
 test('Windows maximizes new profiles, inherits F11 fullscreen in new windows and remembers it after restart',

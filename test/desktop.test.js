@@ -62,12 +62,18 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.locator('#n-hardware-cpu').selectOption('4');
     await page.locator('#n-hardware-memory').selectOption('4');
     await page.locator('#n-hardware-gpu').selectOption('nvidia-rtx-3060');
+    if (process.platform === 'win32') {
+      await page.locator('#n-display-preset').selectOption('fhd');
+      await page.locator('#n-display-scale').selectOption('125');
+      assert.match(await page.locator('#n-display-summary').textContent(), /1536×864.*1\.25/);
+    }
     await page.locator('#n-save').click();
     await page.getByText('环境已创建', { exact: true }).waitFor();
     assert.equal(Object.keys(JSON.parse(fs.readFileSync(profiles.file))).length, 2);
     const created = Object.values(JSON.parse(fs.readFileSync(profiles.file))).find(record => record.id !== p.id);
     assert.equal(created.fingerprintMode, 'hardware'); assert.equal(created.hardwareConcurrency, 4); assert.equal(created.deviceMemory, 4);
     assert.equal(created.fingerprintSeed.length, 32);
+    if (process.platform === 'win32') assert.deepEqual(created.display, { preset: 'fhd', scale: 125 });
     assert.equal(await page.locator('#n-fingerprint-seed').inputValue(), '');
     assert.equal(JSON.parse(fs.readFileSync(profiles.file))[p.id].fingerprintMode, 'native');
     const hardwareCard = page.locator('.env-card').filter({ has: page.locator('.name', { hasText: /^2$/ }) });
@@ -75,6 +81,10 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.waitForFunction(() => document.querySelector('#f-fingerprint-seed')?.value.length === 32);
     assert.equal(await page.locator('#f-fingerprint-mode').inputValue(), 'hardware');
     assert.equal(await page.locator('#f-fingerprint-seed').inputValue(), created.fingerprintSeed);
+    if (process.platform === 'win32') {
+      assert.equal(await page.locator('#f-display-preset').inputValue(), 'fhd');
+      assert.equal(await page.locator('#f-display-scale').inputValue(), '125');
+    }
     assert.equal(await page.locator('#f-convert').count(), 0);
     const updatedProfile = page.waitForResponse(response => response.url().includes('/api/profiles/' + created.id) && response.request().method() === 'PATCH');
     await page.locator('#m-save').click();

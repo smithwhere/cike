@@ -441,7 +441,7 @@ function openProfileModal(existing) {
         <div class="field"><label>时区</label><select id="f-tz" class="input">${timezones.map((t) => `<option value="${esc(t)}" ${((p.timezone || 'auto') === t) ? 'selected' : ''}>${TIMEZONE_LABELS[t] || esc(t)}</option>`).join('')}</select></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>分辨率</label><select id="f-vp" class="input">${viewports.map((v) => `<option ${`${p.viewport?.width}x${p.viewport?.height}` === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field"><label for="f-vp">普通窗口尺寸（跟随系统时）</label><select id="f-vp" class="input">${viewports.map((v) => `<option ${`${p.viewport?.width}x${p.viewport?.height}` === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
       </div>
       <div class="field-row">
         <div class="field"><label>WebRTC</label><select id="f-webrtc" class="input">

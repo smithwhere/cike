@@ -45,7 +45,7 @@ function prepareStartupPreferences(directory, preferences) {
   const lines = Object.entries(preferences).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`);
   writePrivate(file, contents + '\n// CIKE native startup BEGIN\n' + lines.join('\n') + '\n// CIKE native startup END\n');
 }
-async function launchNative({ dataDir, directory, profile, proxy, headless, downloadsDirectory, bridge, graphicsMode = 'hardware', onContext = () => {} }) {
+async function launchNative({ dataDir, directory, profile, proxy, headless, downloadsDirectory, bridge, display, graphicsMode = 'hardware', onContext = () => {} }) {
   const recovery = prepareProfile(directory);
   const config = nativeConfig(profile);
   if (bridge) config.addons = [windowExtension(directory, bridge)];
@@ -70,6 +70,7 @@ async function launchNative({ dataDir, directory, profile, proxy, headless, down
   try {
     context = await require('playwright-native').firefox.launchPersistentContext(directory, {
       executablePath: nativeExecutable(dataDir), headless, viewport: null, acceptDownloads: true,
+      ...display,
       ...(proxy ? { proxy: { ...proxy, bypass: bridge ? new URL(bridge.url).hostname : '' } } : {}),
       colorScheme: profile.colorScheme, firefoxUserPrefs: preferences, env: nativeEnvironment(config, preferences),
     });

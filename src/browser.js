@@ -129,7 +129,8 @@ class BrowserManager {
       } else if (proxy) proxy.bypass = '<-loopback>';
       const kernel = profile.fingerprintMode === 'kernel';
       if (kernel && process.env.LFB_EXPOSE_DEBUGGER === '1') throw new Error('Camoufox 使用 Firefox 协议，不提供 Chromium CDP 调试端口');
-      const { options } = buildContextOptions({ ...effective, proxy });
+      const { options, display } = buildContextOptions({ ...effective, proxy });
+      const manageWindows = !display && !headless && process.platform === 'win32' && !kernel;
       const debugPort = !kernel && process.env.LFB_EXPOSE_DEBUGGER === '1' ? await findFreePort(4550, 4599) : null;
       const launchOptions = { ...options, headless, chromiumSandbox: true,
         ignoreDefaultArgs: ['--enable-automation'],
@@ -141,7 +142,7 @@ class BrowserManager {
           ...webrtcArgs({ ...effective, proxy: proxy || useSystemProxy || profile.webrtc === 'auto' }),
         ],
       };
-      if (!kernel && !headless && process.platform === 'win32') {
+      if (manageWindows) {
         await this.windowStates.capture();
         const state = this.windowStates.desired();
         launchOptions.viewport = null;
@@ -166,7 +167,7 @@ class BrowserManager {
         const downloadsDirectory = this.downloadsDirectory || path.join(os.homedir(), 'Downloads');
         await fs.promises.mkdir(downloadsDirectory, { recursive: true });
         let bridge;
-        if (!headless) {
+        if (!headless && !display) {
           windowToken = crypto.randomBytes(24).toString('hex');
           this.windowTokens.set(windowToken, { profileId: id, ready: false });
           windowControl = { token: windowToken, unavailable: false };
@@ -182,7 +183,7 @@ class BrowserManager {
         }
         const graphics = this.settings?.get();
         ({ context, graphicsMode, graphicsFallback } = await launchWithGraphics(mode => require('./native-runtime').launchNative({
-          dataDir: this.store.dataDir, directory, profile: effective, proxy, headless, downloadsDirectory, bridge, graphicsMode: mode,
+          dataDir: this.store.dataDir, directory, profile: effective, proxy, headless, downloadsDirectory, bridge, display, graphicsMode: mode,
           onContext: trackContext,
         }), { mode: graphics?.camoufoxGraphicsMode || 'auto', remembered: graphics?.camoufoxAutoSoftware === true, beforeRetry: () => {
           checkCancelled();
@@ -208,7 +209,7 @@ class BrowserManager {
         trackContext(context);
       }
       if (profile.fingerprintMode === 'hardware') await require('./hardware-runtime').installHardwareContext(context, profile);
-      if (!kernel && !headless && process.platform === 'win32') await this.windowStates.attach(context);
+      if (manageWindows) await this.windowStates.attach(context);
       if (!kernel) await configureDownloads(context);
       checkCancelled();
       const session = { context, debugPort, headless, openedAt: Date.now(), forwarder, network, windowControl, graphicsMode };

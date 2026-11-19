@@ -10,6 +10,40 @@ const { defaultDataDirectory, curlRuntime } = require('../src/platform');
 const { extractBrowserZip } = require('../src/zip');
 const { cftPlatform, downloadUrl, findExecutable, browserVersion } = require('../electron/chromium');
 const CHROMIUM_VERSION = require('../src/chromium-version');
+const { displayCatalog, emulatedDisplay } = require('../src/display-presets');
+const { ProfileStore } = require('../src/store');
+
+test('Windows display presets produce CSS sizes and DPR without changing the native default', () => {
+  const { presets, scales } = displayCatalog('win');
+  const expectedSizes = ['1920x1080', '2560x1440', '2560x1600', '3840x2160', '3440x1440', '1920x1200', '1366x768', '2880x1800', '5120x1440'];
+  assert.deepEqual(presets.map(({ width, height }) => `${width}x${height}`), expectedSizes);
+  assert.equal(new Set(presets.map(({ id }) => id)).size, presets.length);
+  assert.deepEqual(scales, [100, 125, 150, 175, 200]);
+  assert.equal(displayCatalog('mac'), null);
+  assert.equal(emulatedDisplay(undefined, 'win'), null);
+  assert.equal(emulatedDisplay(null, 'win'), null);
+  assert.deepEqual(emulatedDisplay({ preset: 'fhd', scale: 125 }, 'win'), {
+    screen: { width: 1536, height: 864 }, viewport: { width: 1536, height: 864 }, deviceScaleFactor: 1.25,
+  });
+  for (const choice of [{ preset: '__proto__', scale: 100 }, { preset: 'fhd', scale: '125' }, { preset: 'fhd', scale: 175, refreshRate: 240 }]) {
+    assert.throws(() => emulatedDisplay(choice, 'win'), { status: 400 });
+  }
+  assert.throws(() => emulatedDisplay({ preset: 'fhd', scale: 125 }, 'mac'), { status: 400 });
+});
+
+test('a saved display preset survives reopening and can be cleared to follow the system', { skip: process.platform !== 'win32' }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-display-store-'));
+  try {
+    const store = new ProfileStore(root);
+    const display = { preset: 'uhd', scale: 150 };
+    const profile = store.create({ display });
+    assert.deepEqual(new ProfileStore(root).get(profile.id).display, display);
+    assert.deepEqual(store.update(profile.id, { name: 'renamed' }).display, display);
+    assert.throws(() => store.update(profile.id, { display: { preset: 'uhd', scale: 300 } }), { status: 400 });
+    assert.deepEqual(store.get(profile.id).display, display);
+    assert.equal(store.update(profile.id, { display: null }).display, null);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
 
 async function fixtureZip(filename, name, contents, mode) {
   const zip = new ZipFile();

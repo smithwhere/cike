@@ -6,8 +6,16 @@ async function mountHardware(root, prefix, profile = {}) {
   if (!root.isConnected) return;
   const kernel = profile.fingerprintMode === 'kernel', hardware = profile.fingerprintMode === 'hardware', simulated = kernel || hardware;
   const choices = (values, selected, label = String) => values.map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label(value)}</option>`).join('');
+  const displays = options.displays;
   root.innerHTML = `
     <div class="field"><label>指纹策略</label><select id="${prefix}-fingerprint-mode" class="input"><option value="native" ${simulated ? '' : 'selected'}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
+    ${displays ? `<div class="field-row">
+      <div class="field"><label for="${prefix}-display-preset">显示测试预设</label><select id="${prefix}-display-preset" class="input" aria-describedby="${prefix}-display-summary">
+        <option value="">跟随系统</option>
+        ${displays.presets.map(({ id, name, width, height }) => `<option value="${esc(id)}" ${id === profile.display?.preset ? 'selected' : ''}>${width}×${height} · ${esc(name)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label for="${prefix}-display-scale">测试缩放</label><select id="${prefix}-display-scale" class="input">${choices(displays.scales, profile.display?.scale ?? 100, scale => `${scale}%`)}</select></div>
+    </div><p id="${prefix}-display-summary" class="hint" aria-live="polite"></p>` : ''}
     <div id="${prefix}-hardware-fields" class="${simulated ? '' : 'hidden'}">
       <div class="field-row"><div class="field"><label>CPU 线程数</label><select id="${prefix}-hardware-cpu" class="input">${choices(options.cpus, profile.hardwareConcurrency || 8)}</select></div>
       <div id="${prefix}-software-memory" class="field ${kernel ? 'hidden' : ''}"><label>网页内存值（GB）</label><select id="${prefix}-hardware-memory" class="input">${choices(options.memories, profile.deviceMemory || 8, value => value >= 48 ? `${value}（测试值）` : value)}</select></div></div>
@@ -22,6 +30,21 @@ async function mountHardware(root, prefix, profile = {}) {
     <p id="${prefix}-kernel-hint" class="hint ${kernel ? '' : 'hidden'}">内核模式在 Firefox 内部设置 CPU/显卡，页面与 Worker 共用配置，不注入页面脚本。Canvas/音频保持原生，Firefox 原本不提供 deviceMemory。建议显卡保持原生；更改标识不能改变实际 GPU 能力。先在“设置”下载 Camoufox（约 1.3 GB）。Chrome 与 Firefox 的 Cookie/站点数据独立保存，切换后需要重新登录；原 Chrome 数据保留，可切回。配置编号不是网站读取的完整指纹。</p>
     <p id="${prefix}-software-hint" class="hint ${hardware ? '' : 'hidden'}">软件层模式会改写浏览器 API，并可处理 Canvas/音频输出。即使参数一致，检测网站仍可能报告“环境被篡改”。如需避免这些脚本改写痕迹，请使用内核模式；不保证通过所有网站检测。</p>`;
   const field = id => root.querySelector('#' + prefix + '-' + id);
+  if (displays) {
+    const preset = field('display-preset'), scale = field('display-scale');
+    const syncDisplay = () => {
+      const selected = displays.presets.find(item => item.id === preset.value);
+      scale.disabled = !selected;
+      const summary = field('display-summary');
+      if (!selected) { summary.textContent = ''; return; }
+      const ratio = Number(scale.value) / 100;
+      const width = Math.floor(selected.width / ratio), height = Math.floor(selected.height / ratio);
+      const reference = selected.specs ? `硬件参考 ${selected.specs}。` : '';
+      summary.textContent = `CSS 屏幕与视口 ${width}×${height}，DPR ${ratio}。测试窗口使用固定视口。${reference}`;
+    };
+    preset.onchange = scale.onchange = syncDisplay;
+    syncDisplay();
+  }
   const userAgent = field('user-agent');
   const selectedUserAgents = { [profile.fingerprintMode]: profile.userAgent || '' };
   const syncMode = () => {
@@ -62,11 +85,13 @@ function readHardware(root, prefix, fallback = {}) {
   const mode = field('fingerprint-mode')?.value || (['hardware', 'kernel'].includes(fallback.fingerprintMode) ? fallback.fingerprintMode : 'native');
   const userAgentField = field('user-agent');
   const userAgent = userAgentField ? userAgentField.value || null : fallback.userAgent ?? null;
-  if (mode === 'native') return { fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
-  if (mode === 'kernel') return { fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
+  const preset = field('display-preset');
+  const display = preset ? (preset.value ? { preset: preset.value, scale: Number(field('display-scale').value) } : null) : fallback.display ?? null;
+  if (mode === 'native') return { display, fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
+  if (mode === 'kernel') return { display, fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
     userAgent, deviceMemory: null, gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset || 'native', canvasNoise: false, audioNoise: false,
     fingerprintSeed: field('fingerprint-seed')?.value || fallback.fingerprintSeed || null };
-  return { fingerprintMode: 'hardware', userAgent, hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency),
+  return { display, fingerprintMode: 'hardware', userAgent, hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency),
     deviceMemory: Number(field('hardware-memory')?.value || fallback.deviceMemory), gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset,
     canvasNoise: field('hardware-canvas') ? field('hardware-canvas').value === 'yes' : fallback.canvasNoise,
     audioNoise: field('hardware-audio') ? field('hardware-audio').value === 'yes' : fallback.audioNoise,

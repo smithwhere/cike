@@ -153,7 +153,9 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
   });
   router.get('/fingerprints/options', ctx => {
     const { userAgentPresets } = require('./user-agents');
-    ctx.body = { ok: true, ...require('./hardware').hardwareOptions(), userAgents: userAgentPresets(HOST_PLATFORM) };
+    const { displayCatalog } = require('./display-presets');
+    ctx.body = { ok: true, ...require('./hardware').hardwareOptions(), userAgents: userAgentPresets(HOST_PLATFORM),
+      displays: displayCatalog(HOST_PLATFORM) };
   });
   router.post('/fingerprints/generate', ctx => { ctx.body = { ok: true, fingerprint: require('./hardware').generateHardware() }; });
   router.patch('/browserWindows', ctx => {
