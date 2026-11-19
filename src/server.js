@@ -154,8 +154,9 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
   router.get('/fingerprints/options', ctx => {
     const { userAgentPresets } = require('./user-agents');
     const { displayCatalog } = require('./display-presets');
+    const { LOCALES, TIMEZONES } = require('./localemap');
     ctx.body = { ok: true, ...require('./hardware').hardwareOptions(), userAgents: userAgentPresets(HOST_PLATFORM),
-      displays: displayCatalog(HOST_PLATFORM) };
+      displays: displayCatalog(HOST_PLATFORM), locales: LOCALES, timezones: TIMEZONES };
   });
   router.post('/fingerprints/generate', ctx => { ctx.body = { ok: true, fingerprint: require('./hardware').generateHardware() }; });
   router.patch('/browserWindows', ctx => {

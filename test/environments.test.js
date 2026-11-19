@@ -90,7 +90,7 @@ test('close during pending proxy detection cancels launch without recording a la
 test('default page detects through browser fetch, refreshes and reports failures without stale IP', async () => {
   const dir=temp(),store=new ProfileStore(dir),manager=new BrowserManager(store,null,null,{downloadsDirectory:path.join(dir,'downloads')});
   try {
-    const p=store.create({name:'<fixture>',locale:'en-US',timezone:'UTC'});await manager.open(p.id,{headless:true});
+    const p=store.create({name:'<fixture>',locale:'en-US',timezone:'UTC',colorScheme:'dark',reducedMotion:'reduce'});await manager.open(p.id,{headless:true});
     const context=manager.getContext(p.id);let failed=false,calls=0,reported;
     await context.route('https://api.ipify.org/**',route=>{calls++;return failed?route.abort():route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8'})});});
     await context.route('https://ipwho.is/**',route=>route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':START_ORIGIN},body:JSON.stringify({ip:'192.0.2.8',country:'Fixture',timezone:{id:'UTC'},connection:{isp:'Test ISP'}})}));
@@ -98,6 +98,14 @@ test('default page detects through browser fetch, refreshes and reports failures
     await page.waitForFunction(()=>document.querySelector('#refresh').disabled===false);
     assert.equal(await page.locator('#name').innerText(),'<fixture>');assert.equal(await page.locator('#ip').innerText(),'192.0.2.8');assert.equal(reported,'192.0.2.8');
     assert.equal(await page.locator('#isp').innerText(),'Test ISP');
+    await page.locator('#browser-values summary').click();
+    await page.waitForFunction(() => document.getElementById('readout-ua').textContent === navigator.userAgent);
+    assert.equal(await page.locator('#readout-display').innerText(), await page.evaluate(() => `${screen.width}×${screen.height} / ${innerWidth}×${innerHeight} / ${devicePixelRatio}`));
+    assert.equal(await page.locator('#readout-languages').innerText(), await page.evaluate(() => navigator.languages.join('、')));
+    assert.match(await page.locator('#readout-appearance').innerText(), /深色 \/ 减少动画/);
+    await page.waitForFunction(() => document.getElementById('readout-location').textContent !== '检测中…');
+    await page.waitForFunction(() => document.getElementById('readout-fonts').textContent !== '检测中…');
+    assert.equal(calls,1);
     failed=true;await page.locator('#refresh').click();await page.waitForFunction(()=>document.querySelector('#refresh').disabled===false);
     assert.equal(await page.locator('#ip').innerText(),'检测失败');assert.equal(calls,2);
   } finally {await manager.closeAll();fs.rmSync(dir,{recursive:true,force:true});}

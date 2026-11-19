@@ -30,9 +30,9 @@
 在“新建环境 → 指纹选项”或“编辑环境 → 指纹选项”中，把策略改为“硬件模拟（软件层）”。可设置：
 
 - CPU 线程数可选 2、4、6、8、10、12、14、16、18、20、24、28、32。随机生成使用其中 4 线程及以上的选项。
-- 网页内存随机生成使用 4 或 8 GB。手动选择可用 0.5、1、2、4、8、16、32、48、64、96 GB，其中 48、64、96 GB 标为测试值。
-- 显卡标识可选 Intel、NVIDIA、AMD 和 Apple 测试预设，也可沿用原生显卡。随机生成按平台选取。Apple Silicon 选取 Apple 预设，Intel Mac 使用原生显卡，Windows 和 Linux 选取非 Apple 预设。
-- User-Agent 默认使用内核原生值。主动选择随机分配时，从对应操作系统、内核及默认内核主版本的预设中选一次，重开时复用。历史预设可手动用于兼容性测试。Windows 每个内核有 30 条，macOS 每个内核有 10 条。Linux 使用内核原生 UA。
+- 网页内存随机生成使用 4 或 8 GB。手动选择可用 0.5、1、2、4、8、16、32、48、64、96 GB，其中 48、64、96 GB 标为测试值。浏览器的 `deviceMemory` 使用近似分档值。2026 年 10 月 Steam Windows 样本最常见的物理内存为 16 GB 和 32 GB，两档已在手动选项中。参见 [MDN deviceMemory](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory) 和 [Steam 内存调查](https://store.steampowered.com/hwsurvey/ram?platform=pc)。
+- 显卡标识可选 39 种 Intel、NVIDIA、AMD 和 Apple 测试预设，也可沿用原生显卡。Apple Silicon 随机选取 Apple 预设，Intel Mac 使用原生显卡，Windows 和 Linux 随机选取非 Apple 预设。补充型号参考 [Steam 显卡调查](https://store.steampowered.com/hwsurvey/videocard)。
+- User-Agent 默认使用内核原生值。主动选择随机分配时，从对应操作系统、内核及默认内核主版本的预设中选一次，重开时复用。Windows 分别提供 31 条 Chromium 和 32 条 Firefox 测试预设，macOS 分别提供 11 条 Chromium 和 13 条 Firefox 测试预设。Linux 使用内核原生 UA。历史兼容项参考 [Chrome 发布记录](https://chromereleases.googleblog.com/2026/04/)、[Firefox 发布记录](https://www.firefox.com/en-US/releases/) 和 [Firefox UA 格式](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent/Firefox)。
 - Canvas 读取与音频读取：按环境固定处理，或保留原生输出。
 
 首次保存会生成固定的环境种子。更名、修改代理、关闭重开或重启 CIKE 不会自动更换种子。点击“生成另一组”可以重新生成参数和种子；修改后需要关闭并重新打开环境。
@@ -57,6 +57,7 @@ Worker 使用原始 URL 和加载方式，保留 CSP、同源规则与浏览器�
 ## 明确限制
 
 - 操作系统、Client Hints、字体和媒体设备由运行中的内核和系统提供。UA 预设设置传统 `User-Agent` 请求头和 `navigator.userAgent`。
+- 音频设备按浏览器原生权限枚举。网卡型号和 MAC 地址没有对应的标准网页字段，连接读数来自浏览器提供的网络估计。参见 [MediaDevices](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/enumerateDevices) 和 [NetworkInformation](https://developer.mozilla.org/en-US/docs/Web/API/NetworkInformation)。
 - Windows 窗口仍默认最大化并记住 F11 全屏；本模式不把窗口恢复为固定的页面尺寸，也不伪造显示器和系统 DPI。
 - GPU 预设只模拟标识。驱动功能、扩展、限额、着色器精度和性能仍取决于实际设备，不能视为完整的虚拟 GPU。
 - 透明像素、浮点 Canvas/WebGL 格式、其他 WebGL 像素格式和自定义 Worklet 不在当前固定像素处理范围内。

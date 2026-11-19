@@ -1,12 +1,7 @@
 'use strict';
 /* CIKE 渲染层 — 基于 Local API 的单页应用 */
 
-const TIMEZONES = ['auto', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-  'Europe/London', 'Europe/Berlin', 'Europe/Moscow', 'Asia/Dubai', 'Asia/Shanghai',
-  'Asia/Singapore', 'Asia/Tokyo', 'Australia/Sydney'];
-const TIMEZONE_LABELS = { auto: '代理地区 / 无代理时跟随系统' };
-const VIEWPORTS = ['1440x900', '1366x768', '1536x864', '1920x1080', '1280x800', '2560x1440'];
-const LOCALES = ['auto', 'zh-CN', 'en-US', 'en-GB', 'de-DE', 'fr-FR', 'ja-JP'];
+const VIEWPORTS = ['1440x900', '1366x768', '1536x864', '1920x1080', '1280x800', '2560x1440', '1280x720', '1600x900', '1680x1050', '1920x1200', '2560x1080'];
 
 const selectedProfiles = new Set(), selectedProxies = new Set();
 let batchBusy = false;
@@ -77,14 +72,6 @@ function initNewPage() {
   const vpSel = document.getElementById('n-vp');
   if (!vpSel.options.length) {
     vpSel.innerHTML = VIEWPORTS.map((v) => `<option>${v}</option>`).join('');
-  }
-  const locSel = document.getElementById('n-locale');
-  if (!locSel.options.length) {
-    locSel.innerHTML = LOCALES.map((l) => `<option value="${l}" ${l === 'auto' ? 'selected' : ''}>${l === 'auto' ? TIMEZONE_LABELS.auto : l}</option>`).join('');
-  }
-  const tzSel = document.getElementById('n-tz');
-  if (!tzSel.options.length) {
-    tzSel.innerHTML = TIMEZONES.map((t) => `<option value="${t}" ${t === 'auto' ? 'selected' : ''}>${TIMEZONE_LABELS[t] || t}</option>`).join('');
   }
   refreshNewProxySelect();
   if (newPageInited) return;
@@ -169,8 +156,6 @@ async function saveNewProfile(openAfter = false) {
   const spec = {
     group: document.getElementById('n-group').value.trim(),
     ...readHardware(document, 'n'),
-    locale: document.getElementById('n-locale').value,
-    timezone: document.getElementById('n-tz').value,
     viewport: { width: vw, height: vh },
     proxyId,
 
@@ -406,8 +391,6 @@ function proxyOptionsHtml(selectedId) {
 function openProfileModal(existing) {
   const p = existing || {};
   const isEdit = !!existing;
-  const locales = [...new Set([...LOCALES, ...(p.locale ? [p.locale] : [])])];
-  const timezones = [...new Set([...TIMEZONES, ...(p.timezone ? [p.timezone] : [])])];
   const viewports = [...new Set([...VIEWPORTS, ...(p.viewport ? [`${p.viewport.width}x${p.viewport.height}`] : [])])];
   openModal(isEdit ? '编辑环境' : '新建环境', `
     <div class="field"><label>名称</label><input id="f-name" class="input" value="${esc(p.name || '')}" placeholder="例如：店铺-01"></div>
@@ -436,10 +419,6 @@ function openProfileModal(existing) {
     </div>
     <details class="advanced"><summary>指纹选项</summary>
       <div id="f-hardware"></div>
-      <div class="field-row" style="margin-top:10px">
-        <div class="field"><label>语言</label><select id="f-locale" class="input">${locales.map((l) => `<option value="${esc(l)}" ${((p.locale || 'auto') === l) ? 'selected' : ''}>${l === 'auto' ? TIMEZONE_LABELS.auto : esc(l)}</option>`).join('')}</select></div>
-        <div class="field"><label>时区</label><select id="f-tz" class="input">${timezones.map((t) => `<option value="${esc(t)}" ${((p.timezone || 'auto') === t) ? 'selected' : ''}>${TIMEZONE_LABELS[t] || esc(t)}</option>`).join('')}</select></div>
-      </div>
       <div class="field-row">
         <div class="field"><label for="f-vp">普通窗口尺寸（跟随系统时）</label><select id="f-vp" class="input">${viewports.map((v) => `<option ${`${p.viewport?.width}x${p.viewport?.height}` === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
       </div>
@@ -514,8 +493,6 @@ function openProfileModal(existing) {
         name,
         group: body.querySelector('#f-group').value.trim(),
         ...readHardware(body, 'f', p),
-        locale: body.querySelector('#f-locale').value,
-        timezone: body.querySelector('#f-tz').value,
         viewport: { width: vw, height: vh },
       };
       spec.webrtc = body.querySelector('#f-webrtc').value;

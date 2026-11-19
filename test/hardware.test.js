@@ -6,10 +6,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ProfileStore } = require('../src/store');
-const { HOST_PLATFORM } = require('../src/fingerprint');
+const { HOST_PLATFORM, buildContextOptions } = require('../src/fingerprint');
 const { generateHardware, hardwareConfig, hardwareOptions } = require('../src/hardware');
 const { nativeConfig } = require('../src/nativecore');
 const { userAgentPresets, resolveUserAgent, isUserAgentAllowed } = require('../src/user-agents');
+const { COUNTRY_LOCALE, LOCALES, TIMEZONES } = require('../src/localemap');
 
 test('hardware settings have stable per-profile seeds and preserve explicit choices on edits and restart', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-hardware-store-'));
@@ -57,9 +58,10 @@ test('random generation uses every supported CPU and memory choice once per pool
 
 test('simulated GPU presets remain selectable, with platform-specific random pools', (t) => {
   const presets = hardwareOptions().gpus.filter(({ id }) => id !== 'native');
-  assert.equal(presets.length, 28);
+  assert.equal(presets.length, 39);
   let gpuIndex = 0;
-  t.mock.method(crypto, 'randomInt', size => size === 23 || size === 5 ? gpuIndex : 0);
+  const poolSizes = new Set([5, presets.length - 5]);
+  t.mock.method(crypto, 'randomInt', size => poolSizes.has(size) ? gpuIndex : 0);
   for (const [platform, arch] of [['win32', 'x64'], ['linux', 'x64'], ['darwin', 'arm64']]) {
     const pool = presets.filter(({ id }) => id.startsWith('apple-') === (platform === 'darwin'));
     for (const [index, preset] of pool.entries()) {
@@ -79,10 +81,10 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
   let index = 0;
   t.mock.method(crypto, 'randomInt', () => index);
 
-  for (const [platform, count] of [['win', 30], ['mac', 10]]) {
+  for (const [platform, counts] of [['win', { hardware: 31, kernel: 32 }], ['mac', { hardware: 11, kernel: 13 }]]) {
     const presets = userAgentPresets(platform);
     for (const [fingerprintMode, entries] of Object.entries(presets)) {
-      assert.equal(entries.length, count);
+      assert.equal(entries.length, counts[fingerprintMode]);
       for (const [, userAgent] of entries) {
         const profile = { platform, fingerprintMode, userAgent };
         assert.equal(isUserAgentAllowed(profile), true);
@@ -98,9 +100,31 @@ test('User-Agent presets are unique and random selection is scoped to the platfo
       }
     }
   }
-  assert.equal(values.size, 80);
+  assert.equal(values.size, 87);
   assert.equal(resolveUserAgent({ platform: 'linux', fingerprintMode: 'hardware' }, 'random'), null);
   assert.equal(resolveUserAgent({ platform: 'win', fingerprintMode: 'native' }, 'random'), null);
+});
+
+test('region and appearance choices survive reopening and feed browser context options', () => {
+  assert.deepEqual(new Set(LOCALES), new Set(Object.values(COUNTRY_LOCALE)));
+  assert.equal(Intl.getCanonicalLocales(LOCALES).length, LOCALES.length);
+  assert.equal(new Set(TIMEZONES).size, TIMEZONES.length);
+  for (const timeZone of TIMEZONES) assert.doesNotThrow(() => new Intl.DateTimeFormat('en', { timeZone }));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-appearance-'));
+  try {
+    const store = new ProfileStore(dir);
+    const created = store.create({ locale: 'pt-BR', timezone: 'America/Sao_Paulo', colorScheme: 'dark', reducedMotion: 'reduce' });
+    const saved = new ProfileStore(dir).get(created.id);
+    const { options } = buildContextOptions(saved);
+    assert.equal(options.locale, 'pt-BR');
+    assert.equal(options.timezoneId, 'America/Sao_Paulo');
+    assert.equal(options.colorScheme, 'dark');
+    assert.equal(options.reducedMotion, 'reduce');
+    assert.throws(() => store.update(created.id, { reducedMotion: 'invalid' }), { status: 400 });
+    const reset = store.update(created.id, { colorScheme: null, reducedMotion: null });
+    assert.equal(buildContextOptions(reset).options.colorScheme, null);
+    assert.equal(buildContextOptions(reset).options.reducedMotion, null);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('new profiles default to native UA, and explicit UA choices persist', () => {

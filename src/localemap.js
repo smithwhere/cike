@@ -16,9 +16,24 @@ const COUNTRY_LOCALE = {
   ZA: 'en-ZA', NG: 'en-NG',
 };
 
+const LOCALES = [...new Set(Object.values(COUNTRY_LOCALE))];
+const TIMEZONES = [
+  'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix',
+  'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu', 'America/Toronto',
+  'America/Vancouver', 'America/Mexico_City', 'America/Bogota', 'America/Lima',
+  'America/Santiago', 'America/Sao_Paulo', 'America/Argentina/Buenos_Aires',
+  'Europe/London', 'Europe/Berlin', 'Europe/Paris', 'Europe/Madrid', 'Europe/Rome',
+  'Europe/Amsterdam', 'Europe/Warsaw', 'Europe/Kyiv', 'Europe/Moscow', 'Europe/Istanbul',
+  'Africa/Cairo', 'Africa/Lagos', 'Africa/Johannesburg', 'Asia/Jerusalem', 'Asia/Riyadh',
+  'Asia/Dubai', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok', 'Asia/Jakarta',
+  'Asia/Kuala_Lumpur', 'Asia/Singapore', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Taipei',
+  'Asia/Manila', 'Asia/Seoul', 'Asia/Tokyo', 'Australia/Perth', 'Australia/Brisbane',
+  'Australia/Sydney', 'Pacific/Auckland',
+];
+
 function localeForCountry(countryCode) {
   if (!countryCode) return null;
   return COUNTRY_LOCALE[countryCode.toUpperCase()] || null;
 }
 
-module.exports = { localeForCountry, COUNTRY_LOCALE };
+module.exports = { localeForCountry, COUNTRY_LOCALE, LOCALES, TIMEZONES };

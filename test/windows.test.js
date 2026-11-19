@@ -15,7 +15,8 @@ const { ProfileStore } = require('../src/store');
 
 test('Windows display presets produce CSS sizes and DPR without changing the native default', () => {
   const { presets, scales } = displayCatalog('win');
-  const expectedSizes = ['1920x1080', '2560x1440', '2560x1600', '3840x2160', '3440x1440', '1920x1200', '1366x768', '2880x1800', '5120x1440'];
+  const expectedSizes = ['1920x1080', '2560x1440', '2560x1600', '3840x2160', '3440x1440', '1920x1200', '1366x768', '2880x1800', '5120x1440',
+    '1280x720', '1280x800', '1440x900', '1600x900', '1680x1050', '2560x1080'];
   assert.deepEqual(presets.map(({ width, height }) => `${width}x${height}`), expectedSizes);
   assert.equal(new Set(presets.map(({ id }) => id)).size, presets.length);
   assert.deepEqual(scales, [100, 125, 150, 175, 200]);
@@ -24,6 +25,9 @@ test('Windows display presets produce CSS sizes and DPR without changing the nat
   assert.equal(emulatedDisplay(null, 'win'), null);
   assert.deepEqual(emulatedDisplay({ preset: 'fhd', scale: 125 }, 'win'), {
     screen: { width: 1536, height: 864 }, viewport: { width: 1536, height: 864 }, deviceScaleFactor: 1.25,
+  });
+  assert.deepEqual(emulatedDisplay({ preset: 'uwfhd', scale: 125 }, 'win'), {
+    screen: { width: 2048, height: 864 }, viewport: { width: 2048, height: 864 }, deviceScaleFactor: 1.25,
   });
   for (const choice of [{ preset: '__proto__', scale: 100 }, { preset: 'fhd', scale: '125' }, { preset: 'fhd', scale: 175, refreshRate: 240 }]) {
     assert.throws(() => emulatedDisplay(choice, 'win'), { status: 400 });

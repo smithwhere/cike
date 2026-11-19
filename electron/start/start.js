@@ -33,3 +33,68 @@ async function detect() {
 }
 document.getElementById('refresh').onclick = detect;
 detect();
+
+const valuesPanel = document.getElementById('browser-values');
+function refreshDisplay() {
+  text('readout-display', `${screen.width}×${screen.height} / ${innerWidth}×${innerHeight} / ${devicePixelRatio}`);
+}
+
+function graphicsReadout() {
+  const canvas = document.createElement('canvas');
+  const webgl2 = canvas.getContext('webgl2');
+  const gl = webgl2 || canvas.getContext('webgl');
+  const extension = gl?.getExtension('WEBGL_debug_renderer_info');
+  const renderer = gl ? gl.getParameter(extension?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) : null;
+  const webgl = renderer ? `${webgl2 ? 'WebGL 2' : 'WebGL'} · ${renderer}` : 'WebGL 不可用';
+  return `${webgl} / WebGPU ${navigator.gpu ? '接口可用' : '接口不可用'}`;
+}
+
+function supportedCodecs() {
+  const media = document.createElement('video');
+  const formats = [
+    ['H.264', 'video/mp4; codecs="avc1.42E01E"'],
+    ['VP9', 'video/webm; codecs="vp9"'],
+    ['AV1', 'video/mp4; codecs="av01.0.04M.08"'],
+    ['AAC', 'audio/mp4; codecs="mp4a.40.2"'],
+    ['Opus', 'audio/webm; codecs="opus"'],
+  ];
+  return formats.filter(([, type]) => media.canPlayType(type)).map(([name]) => name).join('、') || '未报告样本格式';
+}
+
+async function readFonts() {
+  const samples = ['Arial', 'Calibri', 'Segoe UI', 'Microsoft YaHei', 'Helvetica Neue', 'PingFang SC', 'Noto Sans'];
+  const names = await Promise.all(samples.map(async name => {
+    try {
+      await new FontFace('cike-font-sample', `local("${name}")`).load();
+      return name;
+    } catch { return null; }
+  }));
+  text('readout-fonts', names.filter(Boolean).join('、') || '未检测到样本字体');
+}
+
+async function readLocationPermission() {
+  try {
+    const { state } = await navigator.permissions.query({ name: 'geolocation' });
+    text('readout-location', { granted: '允许', prompt: '使用时询问', denied: '已拒绝' }[state]);
+  } catch { text('readout-location', '权限状态不可用'); }
+}
+
+valuesPanel.addEventListener('toggle', () => {
+  if (!valuesPanel.open) return;
+  refreshDisplay();
+  text('readout-ua', navigator.userAgent);
+  text('readout-languages', navigator.languages.join('、'));
+  const memory = navigator.deviceMemory;
+  text('readout-hardware', `${navigator.hardwareConcurrency ?? '未知'} / ${memory == null ? '接口不可用' : `${memory} GiB`}`);
+  const mode = matchMedia('(prefers-color-scheme: dark)').matches ? '深色' : '浅色';
+  const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? '减少动画' : '无偏好';
+  const colors = matchMedia('(forced-colors: active)').matches ? '启用' : '未启用';
+  text('readout-appearance', `${mode} / ${motion} / ${colors}`);
+  text('readout-graphics', graphicsReadout());
+  text('readout-codecs', supportedCodecs());
+  const connection = navigator.connection;
+  text('readout-network', connection ? `${connection.effectiveType} · ${connection.downlink} Mbps · ${connection.rtt} ms` : '接口不可用');
+  void readFonts();
+  void readLocationPermission();
+});
+window.addEventListener('resize', () => { if (valuesPanel.open) refreshDisplay(); });

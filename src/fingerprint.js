@@ -24,7 +24,8 @@ function validateProfile(profile) {
   const { width, height } = profile.viewport || {};
   if (![width, height].every(n => Number.isInteger(n) && n >= 320 && n <= 7680)) bad('窗口尺寸必须在 320–7680 之间');
   if (!(profile.deviceScaleFactor >= 0.5 && profile.deviceScaleFactor <= 4)) bad('无效的缩放比例');
-  if (!['light', 'dark', 'no-preference'].includes(profile.colorScheme)) bad('无效的外观设置');
+  if (![null, 'light', 'dark', 'no-preference'].includes(profile.colorScheme)) bad('无效的外观设置');
+  if (profile.reducedMotion != null && !['reduce', 'no-preference'].includes(profile.reducedMotion)) bad('无效的动画偏好');
   return emulatedDisplay(profile.display, profile.platform);
 }
 function buildContextOptions(profile) {
@@ -33,6 +34,7 @@ function buildContextOptions(profile) {
     viewport: profile.viewport,
     deviceScaleFactor: profile.deviceScaleFactor,
     colorScheme: profile.colorScheme,
+    reducedMotion: profile.reducedMotion,
     acceptDownloads: true,
     ignoreHTTPSErrors: false,
     bypassCSP: false,

@@ -1,13 +1,29 @@
 'use strict';
+const AUTOMATIC_REGION = '代理地区 / 无代理时跟随系统';
+const COLOR_SCHEMES = { light: '浅色', dark: '深色', system: '跟随系统', 'no-preference': '无偏好（兼容）' };
+const MOTION_PREFERENCES = { 'no-preference': '无偏好', reduce: '减少动画', system: '跟随系统' };
 let hardwareOptionsPromise;
 async function mountHardware(root, prefix, profile = {}) {
   if (!hardwareOptionsPromise) hardwareOptionsPromise = api('/api/fingerprints/options');
   const options = await hardwareOptionsPromise;
   if (!root.isConnected) return;
   const kernel = profile.fingerprintMode === 'kernel', hardware = profile.fingerprintMode === 'hardware', simulated = kernel || hardware;
-  const choices = (values, selected, label = String) => values.map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label(value)}</option>`).join('');
+  const choices = (values, selected, label = String) => values.map(value => `<option value="${esc(value)}" ${value === selected ? 'selected' : ''}>${esc(label(value))}</option>`).join('');
+  const locales = [...new Set(['auto', ...options.locales, profile.locale || 'auto'])];
+  const timezones = [...new Set(['auto', ...options.timezones, profile.timezone || 'auto'])];
+  const regionLabel = value => value === 'auto' ? AUTOMATIC_REGION : value;
+  const color = profile.colorScheme === null ? 'system' : profile.colorScheme ?? 'light';
+  const motion = profile.reducedMotion === null ? 'system' : profile.reducedMotion ?? 'no-preference';
   const displays = options.displays;
   root.innerHTML = `
+    <div class="field-row">
+      <div class="field"><label for="${prefix}-locale">语言</label><select id="${prefix}-locale" class="input">${choices(locales, profile.locale || 'auto', regionLabel)}</select></div>
+      <div class="field"><label for="${prefix}-tz">时区</label><select id="${prefix}-tz" class="input">${choices(timezones, profile.timezone || 'auto', regionLabel)}</select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="${prefix}-color-scheme">网页外观</label><select id="${prefix}-color-scheme" class="input">${choices(Object.keys(COLOR_SCHEMES), color, value => COLOR_SCHEMES[value])}</select></div>
+      <div class="field"><label for="${prefix}-reduced-motion">网页动画偏好</label><select id="${prefix}-reduced-motion" class="input">${choices(Object.keys(MOTION_PREFERENCES), motion, value => MOTION_PREFERENCES[value])}</select></div>
+    </div>
     <div class="field"><label>指纹策略</label><select id="${prefix}-fingerprint-mode" class="input"><option value="native" ${simulated ? '' : 'selected'}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
     ${displays ? `<div class="field-row">
       <div class="field"><label for="${prefix}-display-preset">显示测试预设</label><select id="${prefix}-display-preset" class="input" aria-describedby="${prefix}-display-summary">
@@ -87,11 +103,20 @@ function readHardware(root, prefix, fallback = {}) {
   const userAgent = userAgentField ? userAgentField.value || null : fallback.userAgent ?? null;
   const preset = field('display-preset');
   const display = preset ? (preset.value ? { preset: preset.value, scale: Number(field('display-scale').value) } : null) : fallback.display ?? null;
-  if (mode === 'native') return { display, fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
-  if (mode === 'kernel') return { display, fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
+  const color = field('color-scheme')?.value ?? (fallback.colorScheme === null ? 'system' : fallback.colorScheme ?? 'light');
+  const motion = field('reduced-motion')?.value ?? (fallback.reducedMotion === null ? 'system' : fallback.reducedMotion ?? 'no-preference');
+  const common = {
+    display,
+    locale: field('locale')?.value ?? fallback.locale ?? 'auto',
+    timezone: field('tz')?.value ?? fallback.timezone ?? 'auto',
+    colorScheme: color === 'system' ? null : color,
+    reducedMotion: motion === 'system' ? null : motion,
+  };
+  if (mode === 'native') return { ...common, fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
+  if (mode === 'kernel') return { ...common, fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
     userAgent, deviceMemory: null, gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset || 'native', canvasNoise: false, audioNoise: false,
     fingerprintSeed: field('fingerprint-seed')?.value || fallback.fingerprintSeed || null };
-  return { display, fingerprintMode: 'hardware', userAgent, hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency),
+  return { ...common, fingerprintMode: 'hardware', userAgent, hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency),
     deviceMemory: Number(field('hardware-memory')?.value || fallback.deviceMemory), gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset,
     canvasNoise: field('hardware-canvas') ? field('hardware-canvas').value === 'yes' : fallback.canvasNoise,
     audioNoise: field('hardware-audio') ? field('hardware-audio').value === 'yes' : fallback.audioNoise,

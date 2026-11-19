@@ -82,7 +82,8 @@ async function launchNative({ dataDir, directory, profile, proxy, headless, down
       executablePath: nativeExecutable(dataDir), headless, viewport: null, acceptDownloads: true,
       ...display,
       ...(proxy ? { proxy: { ...proxy, bypass: bridge ? new URL(bridge.url).hostname : '' } } : {}),
-      colorScheme: profile.colorScheme, firefoxUserPrefs: preferences, env: nativeEnvironment(config, preferences),
+      colorScheme: profile.colorScheme, reducedMotion: profile.reducedMotion,
+      firefoxUserPrefs: preferences, env: nativeEnvironment(config, preferences),
     });
     onContext(context);
     context._cikeOnForcedStop = () => { try { recovery.crash(); } catch {} };

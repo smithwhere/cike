@@ -61,7 +61,11 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.waitForFunction(() => document.querySelector('#n-fingerprint-seed')?.value.length === 32);
     await page.locator('#n-hardware-cpu').selectOption('4');
     await page.locator('#n-hardware-memory').selectOption('4');
-    await page.locator('#n-hardware-gpu').selectOption('nvidia-rtx-3060');
+    await page.locator('#n-hardware-gpu').selectOption('nvidia-rtx-4070');
+    await page.locator('#n-locale').selectOption('pt-BR');
+    await page.locator('#n-tz').selectOption('America/Sao_Paulo');
+    await page.locator('#n-color-scheme').selectOption('dark');
+    await page.locator('#n-reduced-motion').selectOption('reduce');
     if (process.platform === 'win32') {
       await page.locator('#n-display-preset').selectOption('fhd');
       await page.locator('#n-display-scale').selectOption('125');
@@ -72,6 +76,9 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     assert.equal(Object.keys(JSON.parse(fs.readFileSync(profiles.file))).length, 2);
     const created = Object.values(JSON.parse(fs.readFileSync(profiles.file))).find(record => record.id !== p.id);
     assert.equal(created.fingerprintMode, 'hardware'); assert.equal(created.hardwareConcurrency, 4); assert.equal(created.deviceMemory, 4);
+    assert.equal(created.gpuPreset, 'nvidia-rtx-4070');
+    assert.equal(created.locale, 'pt-BR'); assert.equal(created.timezone, 'America/Sao_Paulo');
+    assert.equal(created.colorScheme, 'dark'); assert.equal(created.reducedMotion, 'reduce');
     assert.equal(created.fingerprintSeed.length, 32);
     if (process.platform === 'win32') assert.deepEqual(created.display, { preset: 'fhd', scale: 125 });
     assert.equal(await page.locator('#n-fingerprint-seed').inputValue(), '');
@@ -81,6 +88,10 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
     await page.waitForFunction(() => document.querySelector('#f-fingerprint-seed')?.value.length === 32);
     assert.equal(await page.locator('#f-fingerprint-mode').inputValue(), 'hardware');
     assert.equal(await page.locator('#f-fingerprint-seed').inputValue(), created.fingerprintSeed);
+    assert.equal(await page.locator('#f-locale').inputValue(), 'pt-BR');
+    assert.equal(await page.locator('#f-tz').inputValue(), 'America/Sao_Paulo');
+    assert.equal(await page.locator('#f-color-scheme').inputValue(), 'dark');
+    assert.equal(await page.locator('#f-reduced-motion').inputValue(), 'reduce');
     if (process.platform === 'win32') {
       assert.equal(await page.locator('#f-display-preset').inputValue(), 'fhd');
       assert.equal(await page.locator('#f-display-scale').inputValue(), '125');

@@ -13,7 +13,7 @@ const DEFAULT_SPEC = {
   userAgent: null, proxyId: null, proxy: null,
   viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, display: null,
   locale: 'auto', timezone: 'auto', canvasSeed: null, canvasNoise: false,
-  hardwareConcurrency: null, deviceMemory: null, webrtc: 'auto', colorScheme: 'light',
+  hardwareConcurrency: null, deviceMemory: null, webrtc: 'auto', colorScheme: 'light', reducedMotion: 'no-preference',
   gpuPreset: 'native', audioNoise: false, fingerprintSeed: null,
 };
 const pick = value => Object.fromEntries(Object.keys(DEFAULT_SPEC).filter(k => Object.hasOwn(value, k)).map(k => [k, value[k]]));
