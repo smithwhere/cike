@@ -91,6 +91,7 @@ async function openStartPage(context, profile, network, beginCheck, graphicsMode
   const config = {
     name: profile.name, sequence: profile.sequence, proxy: network.route === 'proxy', expected: exitAddresses(network),
     mode: profile.fingerprintMode, canvasProcessing: software && profile.canvasNoise === true,
+    canvasSiteProtection: profile.fingerprintMode === 'kernel' && profile.canvasSiteProtection === true,
     browserVersion: context.browser()?.version() || null,
     gpuPreset: require('./hardware').GPU_PRESETS[profile.gpuPreset]?.name || '原生显卡',
     graphicsMode: graphicsMode ?? null,

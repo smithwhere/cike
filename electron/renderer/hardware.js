@@ -72,11 +72,14 @@ async function mountHardware(root, prefix, profile = {}) {
       <div class="field"><label for="${prefix}-hardware-gpu">显卡标识</label><select id="${prefix}-hardware-gpu" class="input"></select></div>
       <div class="field"><label for="${prefix}-user-agent">User-Agent</label><select id="${prefix}-user-agent" class="input"></select></div>
       <div id="${prefix}-software-noise" class="field ${kernel ? 'hidden' : ''}"><label for="${prefix}-hardware-canvas">Canvas 读取</label><select id="${prefix}-hardware-canvas" class="input"><option value="yes" ${!hardware || profile.canvasNoise ? 'selected' : ''}>按环境固定处理</option><option value="no" ${hardware && !profile.canvasNoise ? 'selected' : ''}>原生输出</option></select></div>
+      <div id="${prefix}-kernel-canvas-field" class="field ${kernel ? '' : 'hidden'}">
+        <label><input type="checkbox" id="${prefix}-kernel-canvas" ${profile.canvasSiteProtection ? 'checked' : ''}> 按站点保护 Canvas 读取</label>
+      </div>
       <input type="hidden" id="${prefix}-fingerprint-seed" value="${esc(profile.fingerprintSeed || '')}">
       <div class="row"><span id="${prefix}-hardware-id" class="hint">${profile.fingerprintSeed ? '配置编号 ' + esc(profile.fingerprintSeed.slice(0, 8)) : '保存时生成固定配置编号'}</span><button type="button" id="${prefix}-hardware-generate" class="btn small">生成另一组</button></div>
       <p class="hint">保存后重开环境生效。重新生成会更换配置，相同参数不保证得到不同指纹；显卡标识不改变实际渲染能力。</p>
     </div>
-    <p id="${prefix}-kernel-hint" class="hint ${kernel ? '' : 'hidden'}">内核模式在 Firefox 内部设置 CPU 线程数。显卡、Canvas 和音频使用原生输出，网页内存接口随内核。先在“设置”下载 Camoufox（约 1.3 GB）。Chrome 与 Firefox 的 Cookie/站点数据独立保存，切换后需要重新登录；原 Chrome 数据保留，可切回。配置编号不是网站读取的完整指纹。</p>
+    <p id="${prefix}-kernel-hint" class="hint ${kernel ? '' : 'hidden'}">内核模式在 Firefox 内部设置 CPU 线程数。Canvas 可启用 Firefox 的站点保护，显卡和音频使用内核输出。先在“设置”下载 Camoufox（约 1.3 GB）。Chrome 与 Firefox 的 Cookie/站点数据独立保存，切换后需要重新登录；原 Chrome 数据保留，可切回。配置编号不是网站读取的完整指纹。</p>
     <p id="${prefix}-software-hint" class="hint ${hardware ? '' : 'hidden'}">软件层用于兼容性测试。手动内存值仅影响 JavaScript 读数，网络请求头由内核协商。音频保留原生输出。</p>`;
   const field = id => root.querySelector('#' + prefix + '-' + id);
   if (displays) {
@@ -110,6 +113,7 @@ async function mountHardware(root, prefix, profile = {}) {
     field('preferences').classList.toggle('hidden', random);
     viewportField?.classList.toggle('hidden', random);
     for (const id of ['software-memory', 'software-noise', 'software-hint']) field(id).classList.toggle('hidden', mode !== 'hardware');
+    field('kernel-canvas-field').classList.toggle('hidden', mode !== 'kernel');
     field('kernel-hint').classList.toggle('hidden', mode !== 'kernel');
     const allowedGpus = mode === 'hardware' ? options.gpus : [{ id: 'native', name: '原生显卡' }];
     gpu.replaceChildren(...allowedGpus.map(({ id, name }) => new Option(name, id)));
@@ -173,7 +177,9 @@ function readHardware(root, prefix, fallback = {}) {
     forcedColors: readMedia('forced-colors', 'forcedColors', 'none'),
   };
   if (mode === 'native') return { ...common, fingerprintMode: 'native', userAgent: null, hardwareConcurrency: null, deviceMemory: null, gpuPreset: 'native', canvasNoise: false, audioNoise: false, fingerprintSeed: fallback.fingerprintSeed || null };
-  if (mode === 'kernel') return { ...common, fingerprintMode: 'kernel', hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
+  if (mode === 'kernel') return { ...common, fingerprintMode: 'kernel',
+    canvasSiteProtection: field('kernel-canvas')?.checked ?? fallback.canvasSiteProtection ?? false,
+    hardwareConcurrency: Number(field('hardware-cpu')?.value || fallback.hardwareConcurrency || 8),
     userAgent, deviceMemory: null, gpuPreset: field('hardware-gpu')?.value || fallback.gpuPreset || 'native', canvasNoise: false, audioNoise: false,
     fingerprintSeed: field('fingerprint-seed')?.value || fallback.fingerprintSeed || null };
   const memory = field('hardware-memory')?.value ?? fallback.deviceMemory;

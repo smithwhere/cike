@@ -76,6 +76,14 @@ async function launchNative({ dataDir, directory, profile, proxy, headless, down
   prepareStartupPreferences(directory, { ...graphicsPreferences(graphicsMode),
     'browser.startup.page': 0, 'browser.startup.homepage': 'about:blank',
     'browser.sessionstore.resume_from_crash': false, 'network.proxy.no_proxies_on': preferences['network.proxy.no_proxies_on'] });
+  // Apply to Firefox's default preference branch for this launch only. Passing
+  // these to Juggler as user prefs would persist them in the profile on disk.
+  const startupDefaults = { ...preferences };
+  if (profile.canvasSiteProtection) {
+    const targets = '+CanvasRandomization,-EfficientCanvasRandomization';
+    startupDefaults['privacy.baselineFingerprintingProtection.overrides'] = targets;
+    startupDefaults['privacy.fingerprintingProtection.overrides'] = targets;
+  }
   let context;
   try {
     context = await require('playwright-native').firefox.launchPersistentContext(directory, {
@@ -84,7 +92,7 @@ async function launchNative({ dataDir, directory, profile, proxy, headless, down
       ...(proxy ? { proxy: { ...proxy, bypass: bridge ? new URL(bridge.url).hostname : '' } } : {}),
       colorScheme: profile.colorScheme, reducedMotion: profile.reducedMotion,
       contrast: profile.contrast, forcedColors: profile.forcedColors,
-      firefoxUserPrefs: preferences, env: nativeEnvironment(config, preferences),
+      firefoxUserPrefs: preferences, env: nativeEnvironment(config, startupDefaults),
     });
     onContext(context);
     context._cikeOnForcedStop = () => { try { recovery.crash(); } catch {} };

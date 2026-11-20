@@ -8,6 +8,8 @@ const HOST_PLATFORM = { darwin: 'mac', win32: 'win', linux: 'linux' }[process.pl
 function bad(message) { throw Object.assign(new Error(message), { status: 400 }); }
 function validateProfile(profile) {
   if (!['native', 'hardware', 'kernel'].includes(profile.fingerprintMode)) bad('旧环境需要先转换为原生一致模式；Cookie 和站点数据会保留');
+  if (profile.canvasSiteProtection !== undefined && typeof profile.canvasSiteProtection !== 'boolean') bad('Canvas 站点保护必须是布尔值');
+  if (profile.canvasSiteProtection && profile.fingerprintMode !== 'kernel') bad('Canvas 站点保护需要 Camoufox 内核');
   if (profile.platform !== HOST_PLATFORM) bad('环境平台必须与本机系统一致');
   if (!isUserAgentAllowed(profile)) bad('请选择与本机系统和浏览器内核匹配的 User-Agent 预设');
   if (profile.fingerprintMode === 'native' && (profile.canvasNoise || profile.hardwareConcurrency != null || profile.deviceMemory != null || profile.audioNoise || (profile.gpuPreset && profile.gpuPreset !== 'native'))) {

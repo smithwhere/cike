@@ -15,11 +15,17 @@ test('switching core keeps Chrome data, validates hardware and stores native set
     fs.mkdirSync(path.join(store.profileDir(old.id), 'Default'), { recursive: true });
     fs.writeFileSync(path.join(store.profileDir(old.id), 'Default', 'cookie-fixture'), 'preserved');
     const kernel = store.update(old.id, { fingerprintMode: 'kernel' });
+    assert.equal(kernel.canvasSiteProtection, false);
+    store.update(old.id, { canvasSiteProtection: true });
+    assert.equal(new ProfileStore(dir).get(old.id).canvasSiteProtection, true);
+    assert.throws(() => store.update(old.id, { canvasSiteProtection: 'true' }), /布尔/);
+    assert.throws(() => store.create({ canvasSiteProtection: true }), /Camoufox/);
     assert.equal(kernel.deviceMemory, null); assert.equal(kernel.canvasNoise, false); assert.equal(kernel.audioNoise, false);
     assert.equal(fs.readFileSync(path.join(store.profileDir(old.id), 'Default', 'cookie-fixture'), 'utf8'), 'preserved');
     assert.equal(store.update(old.id, { name: 'new name' }).fingerprintSeed, kernel.fingerprintSeed);
     assert.throws(() => store.create({ fingerprintMode: 'kernel', hardwareConcurrency: 0 }), /CPU/);
     assert.throws(() => store.create({ fingerprintMode: 'kernel', gpuPreset: '__proto__' }), /显卡/);
+    assert.equal(store.update(old.id, { fingerprintMode: 'native' }).canvasSiteProtection, false);
     const env = nativeEnvironment({ addons: ['C:\\用户\\内核'], timezone: 'Asia/Shanghai' }, { 'browser.download.dir': 'C:\\下载' });
     assert.ok(/^[\x00-\x7f]+$/.test(env.CAMOU_CONFIG_1));
     assert.deepEqual(JSON.parse(env.CAMOU_CONFIG_1).addons, ['C:\\用户\\内核']);
