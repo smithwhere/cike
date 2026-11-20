@@ -45,7 +45,13 @@ class SocksForwarder {
       upstream.pipe(client);
       client.once('close', () => upstream.destroy());
       upstream.once('close', () => client.destroy());
-    } catch { client.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n'); }
+    } catch (error) {
+      // The local probe uses these CONNECT statuses without exposing upstream error text.
+      const status = error.proxyFailure === 'auth' ? '403 Forbidden'
+        : error.proxyFailure === 'system' ? '424 Failed Dependency'
+        : error.proxyFailure === 'connection' ? '503 Service Unavailable' : '502 Bad Gateway';
+      client.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
+    }
   }
   async request(req, res) {
     const agent = new http.Agent({ keepAlive: false });

@@ -97,22 +97,29 @@ function socksAddress(host) {
 async function socks(socket, proxy, destination) {
   const io = buffered(socket);
   const timer = setTimeout(() => socket.destroy(new Error('SOCKS5 握手超时')), 15000);
+  let connectingTarget = false;
   try {
     if (Buffer.byteLength(proxy.username || '') > 255 || Buffer.byteLength(proxy.password || '') > 255) throw new Error('SOCKS5 字段过长');
     const requestedMethod = proxy.username || proxy.password ? 2 : 0;
     socket.write(Buffer.from([5, 1, requestedMethod]));
     const method = await io.read(2);
     if (method[0] !== 5) throw new Error('SOCKS5 版本无效');
-    if (method[1] !== requestedMethod) throw new Error('SOCKS5 不支持所选认证方式');
+    if (method[1] === 255 || (method[1] === 2 && requestedMethod === 0)) {
+      throw Object.assign(new Error('SOCKS5 不支持所选认证方式'), { proxyFailure: 'auth' });
+    }
+    if (method[1] !== requestedMethod) throw new Error('SOCKS5 认证方式无效');
     if (method[1] === 2) {
       const user = Buffer.from(proxy.username || '');
       const pass = Buffer.from(proxy.password || '');
       socket.write(Buffer.concat([Buffer.from([1, user.length]), user, Buffer.from([pass.length]), pass]));
       const auth = await io.read(2);
-      if (auth[0] !== 1 || auth[1] !== 0) throw new Error('SOCKS5 用户名或密码错误');
+      if (auth[0] !== 1 || auth[1] !== 0) {
+        throw Object.assign(new Error('SOCKS5 用户名或密码错误'), { proxyFailure: 'auth' });
+      }
     }
     const port = Buffer.alloc(2);
     port.writeUInt16BE(destination.port);
+    connectingTarget = true;
     socket.write(Buffer.concat([Buffer.from([5, 1, 0]), socksAddress(destination.host), port]));
     const reply = await io.read(4);
     if (reply[0] !== 5 || reply[1] !== 0) throw new Error(`SOCKS5 连接失败（${reply[1]}）`);
@@ -123,6 +130,7 @@ async function socks(socket, proxy, destination) {
     return socket;
   } catch (error) {
     socket.destroy();
+    if (!connectingTarget) error.proxyFailure ??= 'connection';
     throw error;
   } finally { clearTimeout(timer); }
 }
@@ -154,9 +162,15 @@ async function connectSystem(proxy, host, port) {
 }
 
 async function connectSocks(upstream, host, port, systemProxy) {
-  const socket = systemProxy
-    ? await connectSystem(systemProxy, upstream.host, upstream.port)
-    : await connect(upstream.host, upstream.port);
+  let socket;
+  try {
+    socket = systemProxy
+      ? await connectSystem(systemProxy, upstream.host, upstream.port)
+      : await connect(upstream.host, upstream.port);
+  } catch (error) {
+    error.proxyFailure = systemProxy ? 'system' : 'connection';
+    throw error;
+  }
   return socks(socket, upstream, { host, port });
 }
 

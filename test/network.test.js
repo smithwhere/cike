@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { SocksForwarder } = require('../src/socksfwd');
 const { connectSocks } = require('../src/proxyroute');
-const { curl } = require('../src/proxycheck');
+const { curl, checkProxy } = require('../src/proxycheck');
 const { ProfileStore } = require('../src/store');
 const { BrowserManager } = require('../src/browser');
 const listen = s => new Promise(r => s.listen(0, '127.0.0.1', r));
@@ -19,13 +19,14 @@ test('IP timezone follows the selected exit and keeps the configured mode across
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-ip-timezone-'));
   const store = new ProfileStore(directory);
   let directChecks = 0;
+  let region = { timezone: 'America/New_York' };
   const manager = new BrowserManager(store, null, null, {
     startPage: false,
     checkDirectNetwork: async () => {
       if (++directChecks > 1) throw new Error('fixture offline');
       return { exitIp: '192.0.2.10', timezone: 'Europe/Prague' };
     },
-    checkProxy: async () => ({ status: 'ok', exitIp: '192.0.2.20', timezone: 'America/New_York' }),
+    checkProxy: async () => ({ status: 'ok', exitIp: '192.0.2.20', ...region }),
   });
   const zone = id => manager.getContext(id).pages()[0].evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   try {
@@ -40,6 +41,13 @@ test('IP timezone follows the selected exit and keeps the configured mode across
     await manager.open(proxied.id, { headless: true });
     assert.equal(await zone(proxied.id), 'America/New_York');
     assert.equal(directChecks, 1);
+    await manager.close(proxied.id);
+    region = {};
+    store.update(proxied.id, { timezone: 'Asia/Tokyo', locale: 'ja-JP' });
+    const manual = await manager.open(proxied.id, { headless: true });
+    assert.equal(manual.network.route, 'proxy');
+    assert.equal(await zone(proxied.id), 'Asia/Tokyo');
+    assert.equal(await manager.getContext(proxied.id).pages()[0].evaluate(() => navigator.language), 'ja-JP');
     await manager.close(proxied.id);
 
     const offline = await manager.open(direct.id, { headless: true });
@@ -115,6 +123,40 @@ test('curl forces selected proxy despite NO_PROXY and keeps authentication out o
     assert.equal(await curl({ type: 'http', host: '127.0.0.1', port: proxy.address().port, username: 'fixture', password: 'secret' }, 'http://unresolvable.invalid'), 'via proxy');
     assert.equal(auth, 'Basic ' + Buffer.from('fixture:secret').toString('base64'));
   } finally { if (old === undefined) delete process.env.NO_PROXY; else process.env.NO_PROXY = old; await close(proxy); }
+});
+
+test('exit probes distinguish HTTP and SOCKS5 authentication, connection and tunnel failures', async () => {
+  let status = 407;
+  const httpProxy = http.createServer();
+  httpProxy.on('connect', (_request, socket) => {
+    socket.end(`HTTP/1.1 ${status} Fixture\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`);
+  });
+  const socksProxy = net.createServer(socket => {
+    socket.on('error', () => {});
+    socket.once('data', () => {
+      socket.write(Buffer.from([5, 2]));
+      socket.once('data', () => socket.end(Buffer.from([1, 1])));
+    });
+  });
+  await listen(httpProxy);
+  await listen(socksProxy);
+  const httpPort = httpProxy.address().port, socksPort = socksProxy.address().port;
+  const credentials = { username: 'fixture-user', password: 'fixture-secret' };
+  const probe = (type, port) => checkProxy({ type, host: '127.0.0.1', port, ...credentials });
+  try {
+    for (const result of [await probe('http', httpPort), await probe('socks5', socksPort)]) {
+      assert.equal(result.status, 'failed');
+      assert.equal(result.code, 'PROXY_AUTH');
+      assert.doesNotMatch(JSON.stringify(result), /fixture-user|fixture-secret/);
+    }
+    status = 502;
+    assert.equal((await probe('http', httpPort)).code, 'PROXY_EXIT');
+  } finally {
+    await close(httpProxy);
+    await close(socksProxy);
+  }
+  assert.equal((await probe('http', httpPort)).code, 'PROXY_CONNECTION');
+  assert.equal((await probe('socks5', socksPort)).code, 'PROXY_CONNECTION');
 });
 
 test('SOCKS5 sends IPv4, IPv6 and DNS destinations in their own wire types', async () => {

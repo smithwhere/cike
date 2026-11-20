@@ -210,6 +210,31 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       assert.ok(await card.locator('.environment-number').isVisible());
       if (process.env.LFB_CHROMIUM_EXECUTABLE) {
         const newCard = page.locator('.env-card').filter({ has: page.locator('.name', { hasText: /^2$/ }) });
+        const openURL = '**/api/openBrowser';
+        let failure = { code: 'PROXY_AUTH', error: '代理认证失败。请核对用户名、密码和认证方式。' };
+        await page.route(openURL, route => route.fulfill({
+          status: 409, headers: { 'access-control-allow-origin': 'null' }, json: { ok: false, ...failure },
+        }));
+        try {
+          await card.getByRole('button', { name: '打开', exact: true }).click();
+          await card.getByRole('status').filter({ hasText: '代理认证失败' }).waitFor();
+          await card.getByRole('button', { name: '编辑代理', exact: true }).click();
+          assert.equal(await page.locator('#ep-port').inputValue(), '1080');
+          await page.locator('#ep-cancel').click();
+          failure = { code: 'PROXY_REGION', error: '出口 IP 已验证，但代理出口时区未知。' };
+          await card.getByRole('button', { name: '重试打开', exact: true }).click();
+          await card.getByRole('button', { name: '设置语言和时区', exact: true }).click();
+          await page.locator('#region-locale').selectOption('en-US');
+          await page.locator('#region-timezone').selectOption('America/New_York');
+          await page.locator('#m-save').click();
+          await page.getByText('语言和时区已保存，可以重新打开环境').waitFor();
+          const updated = JSON.parse(fs.readFileSync(profiles.file))[p.id];
+          assert.equal(updated.timezone, 'America/New_York');
+          assert.equal(updated.locale, 'en-US');
+          assert.equal(updated.proxy.server, 'socks5://127.0.0.1:1080');
+        } finally {
+          await page.unroute(openURL);
+        }
         const opened = page.waitForResponse(response => response.url().endsWith('/api/openBrowser') && response.request().method() === 'POST');
         await newCard.locator('[data-act="open"]').click();
         const openResponse = await opened;

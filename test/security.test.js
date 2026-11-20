@@ -85,9 +85,9 @@ test('missing, failed, stale and unknown-region proxies cannot launch or fall ba
     manager = new BrowserManager(store, proxies, null, { checkProxy: (...args) => check(...args) });
     await assert.rejects(manager.open(p.id), /authentication/);
     check = async () => ({ status: 'ok', exitIp: '192.0.2.1', countryCode: null, timezone: null });
-    await assert.rejects(manager.open(p.id), /时区未知/);
+    await assert.rejects(manager.open(p.id), { proxyCode: 'PROXY_REGION', message: /出口 IP 已验证.*地区未知.*时区未知/ });
     store.update(p.id, { timezone: 'UTC' });
-    await assert.rejects(manager.open(p.id), /地区未知/);
+    await assert.rejects(manager.open(p.id), { proxyCode: 'PROXY_REGION', message: /地区未知/ });
     check = async () => { proxies.update(x.id, { port: 10 }); return { status: 'ok' }; };
     await assert.rejects(manager.open(p.id), /发生变化/);
     proxies.remove(x.id);
@@ -178,6 +178,11 @@ test('proxy preflight accepts IPv6-only routes and canonicalizes matching exit a
   });
   assert.deepEqual(seen, ['api.ipify.org', 'api6.ipify.org', 'ipwho.is']);
   assert.deepEqual(network, { exitIp: '2001:db8::5', exitIPv4: null, exitIPv6: '2001:db8::5', country: 'Fixture', countryCode: 'US', timezone: 'Etc/UTC' });
+  const regionUnavailable = await readProxyNetwork(transport, async (_proxy, url) => {
+    if (url === 'https://api.ipify.org') return '192.0.2.5';
+    throw new Error('fixture unavailable');
+  });
+  assert.deepEqual(regionUnavailable, { exitIp: '192.0.2.5', exitIPv4: '192.0.2.5', exitIPv6: null, country: null, countryCode: null, timezone: null });
   await assert.rejects(readProxyNetwork(transport, async () => 'not an IP'), /响应无效/);
 });
 
@@ -277,7 +282,9 @@ test('interrupted profile cleanup stays listed and is retryable after a restart'
 });
 
 test('API uses header auth, rejects foreign origins, protects proxy references and redacts inline passwords', async () => {
-  const dir = temp(), b = buildBackend(dir);
+  const dir = temp();
+  let probe = { status: 'failed', code: 'PROXY_AUTH', error: '代理认证失败' };
+  const b = buildBackend(dir, { checkProxy: async () => probe });
   const server = http.createServer(b.app.callback());
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${server.address().port}/api`;
@@ -291,6 +298,18 @@ test('API uses header auth, rejects foreign origins, protects proxy references a
     assert.ok(!(await (await request('/profiles')).text()).includes('fixture-secret'));
     const x = b.proxyStore.add({ type: 'http', host: '127.0.0.1', port: 9 });
     b.store.update(p.id, { proxyId: x.id });
+    const checked = await (await request('/proxies/check', 'POST', { ids: [x.id] })).json();
+    assert.equal(checked.results[0].code, 'PROXY_AUTH');
+    assert.equal(b.proxyStore.get(x.id).checkCode, 'PROXY_AUTH');
+    const blocked = await request('/openBrowser', 'POST', { profile_id: p.id });
+    assert.equal(blocked.status, 502);
+    assert.deepEqual(await blocked.json(), { ok: false, error: '代理认证失败', code: 'PROXY_AUTH' });
+    probe = { status: 'ok', exitIp: '192.0.2.5', countryCode: null, timezone: null };
+    const noRegion = await request('/openBrowser', 'POST', { profile_id: p.id });
+    assert.equal(noRegion.status, 409);
+    assert.equal((await noRegion.json()).code, 'PROXY_REGION');
+    assert.equal(b.proxyStore.get(x.id).checkCode, null);
+    assert.equal(b.browsers.isOpen(p.id), false);
     assert.equal((await request('/proxies/' + x.id, 'DELETE')).status, 409);
     assert.equal((await request('/profiles/' + p.id, 'PATCH', { proxyId: null })).status, 200);
     assert.equal((await request('/proxies/' + x.id, 'DELETE')).status, 200);

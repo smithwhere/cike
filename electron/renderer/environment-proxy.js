@@ -1,5 +1,5 @@
 'use strict';
-async function openEnvironmentProxy(profile) {
+async function openEnvironmentProxy(profile, readOnOpen = true) {
   if (!profile) return;
   await loadProxies();
   openModal(`环境 #${profile.sequence} · 修改代理`, `
@@ -58,14 +58,14 @@ async function openEnvironmentProxy(profile) {
         if (check && data.mode !== 'none') {
           $('result').textContent = '已保存，正在检测出口 IP…';
           const { result } = await api('/api/profiles/' + profile.id + '/checkProxy', { method: 'POST', body: '{}' });
-          if (result.status !== 'ok') { await loadProfiles(); throw new Error('代理已保存，检测失败：' + (result.error || '连接不可用')); }
-          toast('代理已保存 · ' + formatExitIps(result));
+          if (result.status !== 'ok') { await loadProfiles(); throw new Error('代理已保存。' + formatProxyResult(result)); }
+          toast('代理已保存 · ' + formatProxyResult(result));
         } else toast('当前环境代理已修改');
         close(); await loadProfiles();
       } catch (error) { $('result').textContent = error.message; }
       finally { $('save').disabled = $('check').disabled = false; }
     };
     $('save').onclick = () => save(false); $('check').onclick = () => save(true); $('cancel').onclick = close;
-    readClipboard(true).catch(() => {});
+    if (readOnOpen) readClipboard(true).catch(() => {});
   });
 }

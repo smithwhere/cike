@@ -22,7 +22,7 @@ function proxyURL(p, curl = false) {
 function resolveProxy(profile, proxyStore) {
   if (profile.proxyId) {
     const p = proxyStore?.getSecret(profile.proxyId);
-    if (!p) throw Object.assign(new Error('绑定的代理不存在，请重新绑定后再打开；已阻止直连回退'), { status: 409 });
+    if (!p) throw Object.assign(new Error('绑定的代理不存在，请重新绑定后再打开；已阻止直连回退'), { status: 409, proxyCode: 'PROXY_CONFIG' });
     validateProxy(p);
     return p;
   }
