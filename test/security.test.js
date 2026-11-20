@@ -13,6 +13,7 @@ const { Settings } = require('../src/settings');
 const { SocksForwarder } = require('../src/socksfwd');
 const { readProxyNetwork } = require('../src/proxycheck');
 const { chromiumBrowsingSwitches } = require('../src/chromium-browsing');
+const { prepareChromiumDNS, selectFirefoxDNSMode, firefoxDNSPreferences } = require('../src/secure-dns');
 const { HOST_PLATFORM } = require('../src/fingerprint');
 const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cike-security-'));
 const provider = { encrypt: s => Buffer.from(s).toString('base64'), decrypt: s => Buffer.from(s, 'base64').toString() }; // codec fixture, not production encryption
@@ -198,6 +199,47 @@ test('Chromium restores its browsing protections while retaining other Playwrigh
   const features = actual.find(arg => arg.startsWith('--disable-features='));
   assert.match(features, /PaintHolding/);
   assert.doesNotMatch(features, /HttpsUpgrades|ThirdPartyStoragePartitioning/);
+});
+
+test('environment DNS defaults are scoped to direct browsing and can be changed for existing profiles', async () => {
+  const dir = temp();
+  try {
+    const settings = new Settings(dir);
+    const stored = path.join(dir, 'Local State');
+    fs.writeFileSync(stored, JSON.stringify({ profile: { last_used: 'Default' }, dns_over_https: { mode: 'automatic' } }));
+    const read = () => JSON.parse(fs.readFileSync(stored, 'utf8'));
+
+    prepareChromiumDNS(dir, settings.get().dnsMode);
+    assert.deepEqual(read().profile, { last_used: 'Default' });
+    assert.equal(read().dns_over_https.mode, 'secure');
+    assert.deepEqual(JSON.parse(read().dns_over_https.templates).servers, [
+      { template: 'https://cloudflare-dns.com/dns-query', endpoints: [{ ips: ['1.1.1.1'] }] },
+      { template: 'https://dns.google/dns-query', endpoints: [{ ips: ['8.8.8.8'] }] },
+    ]);
+    assert.deepEqual(firefoxDNSPreferences('public'), {
+      'network.trr.mode': 3, 'network.trr.uri': 'https://cloudflare-dns.com/dns-query', 'network.trr.bootstrapAddr': '1.1.1.1',
+    });
+
+    const proxy = { server: 'socks5://127.0.0.1:1080' };
+    prepareChromiumDNS(dir, 'public', proxy);
+    assert.deepEqual(read().dns_over_https, { mode: 'off', templates: '' });
+    assert.deepEqual(firefoxDNSPreferences('public', proxy), firefoxDNSPreferences('system'));
+    assert.equal(firefoxDNSPreferences('system')['network.trr.mode'], 5);
+    const probes = [];
+    const checkProvider = async ({ ip }) => { probes.push(ip); return ip === '8.8.8.8'; };
+    assert.equal(await selectFirefoxDNSMode('public', proxy, checkProvider), 'public');
+    assert.deepEqual(probes, []);
+    assert.equal(await selectFirefoxDNSMode('public', null, checkProvider), 'google');
+    assert.deepEqual(probes, ['1.1.1.1']);
+    assert.equal(await selectFirefoxDNSMode('public', null, async () => true), 'cloudflare');
+
+    settings.set({ dnsMode: 'google' });
+    const { dnsMode } = new Settings(dir).get();
+    prepareChromiumDNS(dir, dnsMode);
+    assert.equal(JSON.parse(read().dns_over_https.templates).servers.length, 1);
+    assert.equal(firefoxDNSPreferences(dnsMode)['network.trr.bootstrapAddr'], '8.8.8.8');
+    assert.throws(() => settings.set({ dnsMode: 'other' }), { status: 400 });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('site permissions open in their own running desktop environment', async () => {

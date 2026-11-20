@@ -169,6 +169,9 @@
         </div>
         <div class="card">
           <h2>网络</h2>
+          <label for="set-dns-mode">直连环境 DNS</label>
+          <div class="row"><select id="set-dns-mode" class="input"><option value="public">默认（1.1.1.1 和 8.8.8.8）</option><option value="cloudflare">Cloudflare（1.1.1.1）</option><option value="google">Google（8.8.8.8）</option><option value="system">使用系统 DNS</option></select><button id="btn-save-dns-mode" class="btn primary small">保存</button></div>
+          <p class="hint">默认通过 HTTPS 查询。Chromium 使用两个服务；Camoufox 启动时优先选择 Cloudflare，连不上时尝试 Google。代理环境继续由代理解析。保存后重开环境生效。</p>
           <label>SOCKS5 代理通过系统代理连接</label>
           <div class="row"><select id="set-socks-system-proxy" class="input"><option value="no">否</option><option value="yes">是</option></select><button id="btn-save-proxy-route" class="btn primary small">保存</button></div>
           <p class="hint">选择“是”后，浏览器先连本机中转，再经过当前电脑的系统代理连接 SOCKS5。没有填写代理时，只走系统代理。更改后重新打开环境生效。</p>

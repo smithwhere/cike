@@ -11,6 +11,7 @@ const { ProxyStore } = require('./proxystore');
 const { checkProxy, checkDirectNetwork, prepareProxyRoute, openProxyTransport, exitAddresses } = require('./proxycheck');
 const { localeForCountry, isAutomaticTimezone } = require('./localemap');
 const { chromiumBrowsingSwitches } = require('./chromium-browsing');
+const { DEFAULT_DNS_MODE, prepareChromiumDNS, selectFirefoxDNSMode } = require('./secure-dns');
 const { privateDirectory } = require('./privatefiles');
 const { prepareDownloads, configureDownloads } = require('./downloads');
 const { WindowStateManager } = require('./windowstate');
@@ -189,7 +190,10 @@ class BrowserManager {
       }
       const directory = kernel ? path.join(this.store.profileDir(id), 'firefox') : this.store.profileDir(id);
       privateDirectory(directory);
+      const dnsMode = this.settings?.get().dnsMode ?? DEFAULT_DNS_MODE;
       if (kernel) {
+        const firefoxDNSMode = await selectFirefoxDNSMode(dnsMode, proxy);
+        checkRoute();
         const downloadsDirectory = this.downloadsDirectory || path.join(os.homedir(), 'Downloads');
         await fs.promises.mkdir(downloadsDirectory, { recursive: true });
         let bridge;
@@ -210,7 +214,7 @@ class BrowserManager {
         const graphics = this.settings?.get();
         checkRoute();
         ({ context, graphicsMode, graphicsFallback } = await launchWithGraphics(mode => require('./native-runtime').launchNative({
-          dataDir: this.store.dataDir, directory, profile: effective, proxy, headless, downloadsDirectory, bridge, display, graphicsMode: mode,
+          dataDir: this.store.dataDir, directory, profile: effective, proxy, headless, downloadsDirectory, bridge, display, dnsMode: firefoxDNSMode, graphicsMode: mode,
           onContext: trackContext,
         }), { mode: graphics?.camoufoxGraphicsMode || 'auto', remembered: graphics?.camoufoxAutoSoftware === true, beforeRetry: () => {
           checkRoute();
@@ -233,6 +237,7 @@ class BrowserManager {
       } else {
         await prepareDownloads(directory, this.downloadsDirectory);
         checkRoute();
+        prepareChromiumDNS(directory, dnsMode, proxy);
         context = await chromium.launchPersistentContext(directory, launchOptions);
         trackContext(context);
       }

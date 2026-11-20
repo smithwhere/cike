@@ -3,6 +3,7 @@ const { privateDirectory, readJSON, writeJSON } = require('./privatefiles');
 const path = require('path');
 const { parseSystemProxy } = require('./proxyroute');
 const { GRAPHICS_MODES } = require('./native-graphics');
+const { DEFAULT_DNS_MODE, DNS_MODES } = require('./secure-dns');
 class Settings {
   constructor(dir, resolveSystemProxy) {
     this.file = path.join(dir, 'settings.json');
@@ -11,6 +12,7 @@ class Settings {
     privateDirectory(dir);
     const saved = readJSON(this.file, {});
     this.value = { socksViaSystemProxy: saved.socksViaSystemProxy === true,
+      dnsMode: DNS_MODES.includes(saved.dnsMode) ? saved.dnsMode : DEFAULT_DNS_MODE,
       camoufoxGraphicsMode: GRAPHICS_MODES.includes(saved.camoufoxGraphicsMode) ? saved.camoufoxGraphicsMode : 'auto',
       camoufoxAutoSoftware: saved.camoufoxAutoSoftware === true,
       browserWindowMode: ['remember', 'maximized', 'fullscreen', 'normal'].includes(saved.browserWindowMode) ? saved.browserWindowMode : 'remember',
@@ -27,6 +29,10 @@ class Settings {
     if (Object.hasOwn(value, 'socksViaSystemProxy')) {
       if (typeof value.socksViaSystemProxy !== 'boolean') throw new Error('请选择是否通过系统代理');
       next.socksViaSystemProxy = value.socksViaSystemProxy;
+    }
+    if (Object.hasOwn(value, 'dnsMode')) {
+      if (!DNS_MODES.includes(value.dnsMode)) throw Object.assign(new Error('请选择有效的环境 DNS 设置'), { status: 400 });
+      next.dnsMode = value.dnsMode;
     }
     if (Object.hasOwn(value, 'browserWindowMode')) {
       if (!['remember', 'maximized', 'fullscreen', 'normal'].includes(value.browserWindowMode)) throw new Error('请选择有效的浏览器窗口模式');

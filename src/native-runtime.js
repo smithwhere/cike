@@ -7,6 +7,7 @@ const { graphicsPreferences } = require('./native-graphics');
 const { stopContext } = require('./browser-lifecycle');
 const { prepareProfile } = require('./native-recovery');
 const { recordFailure } = require('./native-diagnostics');
+const { DEFAULT_DNS_MODE, firefoxDNSPreferences } = require('./secure-dns');
 
 function windowExtension(directory, bridge) {
   const parent = path.join(directory, 'cike-window-extension');
@@ -45,7 +46,8 @@ function prepareStartupPreferences(directory, preferences) {
   const lines = Object.entries(preferences).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`);
   writePrivate(file, contents + '\n// CIKE native startup BEGIN\n' + lines.join('\n') + '\n// CIKE native startup END\n');
 }
-async function launchNative({ dataDir, directory, profile, proxy, headless, downloadsDirectory, bridge, display, graphicsMode = 'hardware', onContext = () => {} }) {
+async function launchNative({ dataDir, directory, profile, proxy, headless, downloadsDirectory, bridge, display, dnsMode = DEFAULT_DNS_MODE,
+  graphicsMode = 'hardware', onContext = () => {} }) {
   const recovery = prepareProfile(directory);
   const config = nativeConfig(profile);
   if (display) {
@@ -59,8 +61,10 @@ async function launchNative({ dataDir, directory, profile, proxy, headless, down
     });
   }
   if (bridge) config.addons = [windowExtension(directory, bridge)];
+  const dnsPreferences = firefoxDNSPreferences(dnsMode, proxy);
   const preferences = {
     ...graphicsPreferences(graphicsMode),
+    ...dnsPreferences,
     'browser.download.folderList': 2, 'browser.download.useDownloadDir': true,
     'browser.download.dir': path.resolve(downloadsDirectory), 'browser.download.alwaysOpenPanel': true,
     'browser.startup.page': 0, 'browser.startup.homepage': 'about:blank',
@@ -73,7 +77,7 @@ async function launchNative({ dataDir, directory, profile, proxy, headless, down
     'media.peerconnection.ice.proxy_only': true, 'media.peerconnection.ice.no_host': true,
     'media.peerconnection.ice.default_address_only': true, 'network.http.http3.enable': false,
   });
-  prepareStartupPreferences(directory, { ...graphicsPreferences(graphicsMode),
+  prepareStartupPreferences(directory, { ...graphicsPreferences(graphicsMode), ...dnsPreferences,
     'browser.startup.page': 0, 'browser.startup.homepage': 'about:blank',
     'browser.sessionstore.resume_from_crash': false, 'network.proxy.no_proxies_on': preferences['network.proxy.no_proxies_on'] });
   // Apply to Firefox's default preference branch for this launch only. Passing

@@ -841,6 +841,7 @@ document.getElementById('btn-del-proxies').onclick = () => runBatch('proxy', 'de
 
 async function loadSettings() {
   const { settings } = await api('/api/settings');
+  document.getElementById('set-dns-mode').value = settings.dnsMode;
   document.getElementById('set-socks-system-proxy').value = settings.socksViaSystemProxy ? 'yes' : 'no';
   document.getElementById('set-browser-window-mode').value = settings.browserWindowMode || 'remember';
   document.getElementById('set-native-graphics').value = settings.camoufoxGraphicsMode || 'auto';
@@ -948,6 +949,12 @@ document.getElementById('btn-save-native-graphics').onclick = async () => {
     await api('/api/settings', { method: 'PATCH', body: JSON.stringify({ camoufoxGraphicsMode: document.getElementById('set-native-graphics').value }) });
     toast('图形渲染设置已保存，重新打开环境后生效');
     await loadSettings();
+  } catch (error) { toast(error.message, true); }
+};
+document.getElementById('btn-save-dns-mode').onclick = async () => {
+  try {
+    await api('/api/settings', { method: 'PATCH', body: JSON.stringify({ dnsMode: document.getElementById('set-dns-mode').value }) });
+    toast('DNS 设置已保存，重新打开环境后生效');
   } catch (error) { toast(error.message, true); }
 };
 document.getElementById('btn-save-proxy-route').onclick = async () => {
