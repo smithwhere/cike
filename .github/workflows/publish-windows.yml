@@ -12,11 +12,6 @@ name: Publish Windows Release
         type: string
         required: true
 
-  workflow_run:
-    workflows: [Build Windows x64]
-    types: [completed]
-    branches: [main]
-
 permissions:
   actions: read
   contents: write
@@ -26,18 +21,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_RUN: ${{ github.event.workflow_run.id || inputs.source_run }}
-  RELEASE_TAG: ${{ inputs.tag || 'v0.18.0' }}
+  SOURCE_RUN: ${{ inputs.source_run }}
+  RELEASE_TAG: ${{ inputs.tag }}
 
 jobs:
   release:
-    if: >-
-      github.repository == 'smithwhere/cike' && github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_repository.full_name == github.repository &&
-        github.event.workflow_run.head_sha == github.sha))
+    if: github.repository == 'smithwhere/cike' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -127,10 +116,6 @@ jobs:
             release-files/SHA256SUMS.txt
           body: |
             CIKE ${{ env.RELEASE_TAG }} Windows x64 免安装版。
-
-            - Chromium 直连环境默认使用 Cloudflare（1.1.1.1）和 Google（8.8.8.8）的 DNS over HTTPS。
-            - Camoufox 启动时优先尝试 Cloudflare，不可达时使用 Google。也可在「设置 → 网络」选单个服务或使用系统 DNS。
-            - 代理环境继续由代理解析网站域名。DNS 设置保存后，重新打开环境即可生效。
 
             - 适用于 Windows 10/11 的 Intel、AMD 64 位电脑。
             - 下载 `${{ steps.source.outputs.filename }}`，完整解压后双击 `CIKE.exe`。首次使用时在「设置」下载 Chromium。
