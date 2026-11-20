@@ -12,11 +12,6 @@ name: Publish Windows Release
         type: string
         required: true
 
-  workflow_run:
-    workflows: [Build Windows x64]
-    types: [completed]
-    branches: [main]
-
 permissions:
   actions: read
   contents: write
@@ -26,18 +21,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_RUN: ${{ github.event.workflow_run.id || inputs.source_run }}
-  RELEASE_TAG: ${{ inputs.tag || 'v0.19.0' }}
+  SOURCE_RUN: ${{ inputs.source_run }}
+  RELEASE_TAG: ${{ inputs.tag }}
 
 jobs:
   release:
-    if: >-
-      github.repository == 'smithwhere/cike' && github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_repository.full_name == github.repository &&
-        github.event.workflow_run.head_sha == github.sha))
+    if: github.repository == 'smithwhere/cike' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -127,9 +116,6 @@ jobs:
             release-files/SHA256SUMS.txt
           body: |
             CIKE ${{ env.RELEASE_TAG }} Windows x64 免安装版。
-
-            - 打开环境时按出口 IP 选择浏览器语言，例如美国为 en-US，法国为 fr-FR。旧环境保存的语言可在地区无法识别时作为备用。
-            - Windows ZIP 仅打包程序和运行依赖，并在发布构建中验证全新启动时的环境列表为空。
 
             - 适用于 Windows 10/11 的 Intel、AMD 64 位电脑。
             - 下载 `${{ steps.source.outputs.filename }}`，完整解压后双击 `CIKE.exe`。首次使用时在「设置」下载 Chromium。
