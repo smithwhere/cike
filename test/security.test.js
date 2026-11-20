@@ -11,7 +11,7 @@ const { BrowserManager } = require('../src/browser');
 const { buildBackend, startBackend } = require('../src/server');
 const { Settings } = require('../src/settings');
 const { SocksForwarder } = require('../src/socksfwd');
-const { readProxyNetwork } = require('../src/proxycheck');
+const { checkDirectNetwork, readProxyNetwork } = require('../src/proxycheck');
 const { chromiumBrowsingSwitches } = require('../src/chromium-browsing');
 const { prepareChromiumDNS, selectFirefoxDNSMode, firefoxDNSPreferences } = require('../src/secure-dns');
 const { HOST_PLATFORM } = require('../src/fingerprint');
@@ -199,6 +199,14 @@ test('Chromium restores its browsing protections while retaining other Playwrigh
   const features = actual.find(arg => arg.startsWith('--disable-features='));
   assert.match(features, /PaintHolding/);
   assert.doesNotMatch(features, /HttpsUpgrades|ThirdPartyStoragePartitioning/);
+});
+
+test('a valid exit country is usable even when the timezone is unavailable', async () => {
+  const network = await checkDirectNetwork(async url => {
+    assert.ok(new URL(url).searchParams.get('fields').split(',').includes('country_code'));
+    return Response.json({ success: true, ip: '192.0.2.10', country_code: 'US', timezone: { id: 'unknown' } });
+  });
+  assert.deepEqual(network, { exitIp: '192.0.2.10', exitIPv4: '192.0.2.10', exitIPv6: null, countryCode: 'US', timezone: null });
 });
 
 test('environment DNS defaults are scoped to direct browsing and can be changed for existing profiles', async () => {

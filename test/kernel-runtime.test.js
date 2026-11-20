@@ -50,10 +50,13 @@ test('native core changes hardware without replacing APIs, agrees across workers
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const origin = `http://127.0.0.1:${server.address().port}`;
-    const store = new ProfileStore(dir), manager = new BrowserManager(store, null, null, { startPage: false, downloadsDirectory: downloads });
+    const store = new ProfileStore(dir), manager = new BrowserManager(store, null, null, {
+      startPage: false, downloadsDirectory: downloads,
+      checkDirectNetwork: async () => ({ exitIp: '192.0.2.10', countryCode: 'US' }),
+    });
     try {
-      const a = store.create({ fingerprintMode: 'kernel', hardwareConcurrency: 4, gpuPreset: 'native', locale: 'en-US', timezone: 'UTC' });
-      const b = store.create({ fingerprintMode: 'kernel', hardwareConcurrency: 16, gpuPreset: 'native', locale: 'en-US', timezone: 'UTC' });
+      const a = store.create({ fingerprintMode: 'kernel', hardwareConcurrency: 4, gpuPreset: 'native', locale: 'fr-FR', timezone: 'UTC' });
+      const b = store.create({ fingerprintMode: 'kernel', hardwareConcurrency: 16, gpuPreset: 'native', locale: 'fr-FR', timezone: 'UTC' });
       await manager.open(a.id, { headless: true });
       const context = manager.getContext(a.id), page = await context.newPage(); await page.goto(origin);
       const main = await page.evaluate(observe);

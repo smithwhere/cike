@@ -42,7 +42,10 @@ test('native fingerprints agree across realms, sandbox stays enabled and five st
     else { r.setHeader('content-type', 'text/html'); r.end('<!doctype html><iframe src="/frame"></iframe>'); }
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
-  const store = new ProfileStore(dir), manager = new BrowserManager(store, null, null, { downloadsDirectory: path.join(dir, 'Downloads') });
+  const store = new ProfileStore(dir), manager = new BrowserManager(store, null, null, {
+    downloadsDirectory: path.join(dir, 'Downloads'),
+    checkDirectNetwork: async () => ({ exitIp: '192.0.2.10', countryCode: 'US' }),
+  });
   const origin = `http://127.0.0.1:${server.address().port}`;
   try {
     const a = store.create({ locale: 'en-US', timezone: 'America/New_York' }), b = store.create({ locale: 'en-US', timezone: 'America/New_York' });

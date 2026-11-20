@@ -20,8 +20,12 @@ async function main() {
     // Keep full verification without fetching SHASUMS256.txt on every build.
     download: { checksums: require('electron/checksums.json') },
     icon, out, overwrite: true, prune: true,
-    ignore: [/^\/(test|docs|scripts|dist|data|\.browsers|\.github|\.git)(\/|$)/,
-      /^\/build-windows\.cmd$/, /\.zip$/i, /\.log$/i],
+    // Include the app and production dependencies only. Local data may be
+    // stored alongside the source when a developer sets LFB_DATA.
+    ignore: [/^\/(?!(?:electron|src|node_modules)(?:\/|$)|(?:package\.json|README\.md|LICENSE)$)/,
+      /^(?!\/node_modules\/).*\/(?:profiles|browsers|desktop|diagnostics)(?:\/|$)/i,
+      /^(?!\/node_modules\/).*\/(?:profiles\.json|profile-sequence\.json|proxies\.json|settings\.json|api_token\.txt|local_api_url\.txt|Local State|Cookies)$/i,
+      /\.zip$/i, /\.log$/i],
     win32metadata: { CompanyName: 'CIKE Community', FileDescription: 'CIKE Windows',
       ProductName: 'CIKE', 'requested-execution-level': 'asInvoker' },
   });

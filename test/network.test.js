@@ -15,31 +15,38 @@ const { BrowserManager } = require('../src/browser');
 const listen = s => new Promise(r => s.listen(0, '127.0.0.1', r));
 const close = s => new Promise(r => { s.closeAllConnections?.(); s.close(r); });
 
-test('IP timezone follows the selected exit and keeps the configured mode across launches', async () => {
+test('the exit country determines browser language while timezone and fallback settings persist', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-ip-timezone-'));
   const store = new ProfileStore(directory);
   let directChecks = 0;
-  let region = { timezone: 'America/New_York' };
+  let region = { countryCode: 'US', timezone: 'America/New_York' };
   const manager = new BrowserManager(store, null, null, {
     startPage: false,
     checkDirectNetwork: async () => {
       if (++directChecks > 1) throw new Error('fixture offline');
-      return { exitIp: '192.0.2.10', timezone: 'Europe/Prague' };
+      return { exitIp: '192.0.2.10', countryCode: 'CZ', timezone: 'Europe/Prague' };
     },
     checkProxy: async () => ({ status: 'ok', exitIp: '192.0.2.20', ...region }),
   });
   const zone = id => manager.getContext(id).pages()[0].evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const language = id => manager.getContext(id).pages()[0].evaluate(() => navigator.language);
   try {
-    const direct = store.create({ fingerprintMode: 'random' });
+    const direct = store.create({ fingerprintMode: 'random', locale: 'fr-FR' });
     assert.equal(direct.timezone, 'ip');
     await manager.open(direct.id, { headless: true });
     assert.equal(await zone(direct.id), 'Europe/Prague');
+    assert.equal(await language(direct.id), 'cs-CZ');
+    const secondWindow = await manager.getContext(direct.id).newPage();
+    assert.equal(await secondWindow.evaluate(() => navigator.language), 'cs-CZ');
+    await secondWindow.close();
     assert.equal(new ProfileStore(directory).get(direct.id).timezone, 'ip');
+    assert.equal(store.get(direct.id).locale, 'fr-FR');
     await manager.close(direct.id);
 
-    const proxied = store.create({ fingerprintMode: 'random', proxy: { server: 'http://127.0.0.1:9' } });
+    const proxied = store.create({ fingerprintMode: 'random', locale: 'fr-FR', proxy: { server: 'http://127.0.0.1:9' } });
     await manager.open(proxied.id, { headless: true });
     assert.equal(await zone(proxied.id), 'America/New_York');
+    assert.equal(await language(proxied.id), 'en-US');
     assert.equal(directChecks, 1);
     await manager.close(proxied.id);
     region = {};
@@ -47,16 +54,18 @@ test('IP timezone follows the selected exit and keeps the configured mode across
     const manual = await manager.open(proxied.id, { headless: true });
     assert.equal(manual.network.route, 'proxy');
     assert.equal(await zone(proxied.id), 'Asia/Tokyo');
-    assert.equal(await manager.getContext(proxied.id).pages()[0].evaluate(() => navigator.language), 'ja-JP');
+    assert.equal(await language(proxied.id), 'ja-JP');
     await manager.close(proxied.id);
 
     const offline = await manager.open(direct.id, { headless: true });
     assert.match(offline.warning, /系统时区/);
+    assert.match(offline.warning, /备用语言 fr-FR/);
+    assert.equal(await language(direct.id), 'fr-FR');
     assert.equal(store.get(direct.id).timezone, 'ip');
     const explicit = store.create({ timezone: 'Asia/Tokyo' });
     await manager.open(explicit.id, { headless: true });
     assert.equal(await zone(explicit.id), 'Asia/Tokyo');
-    assert.equal(directChecks, 2);
+    assert.equal(directChecks, 3);
   } finally { await manager.closeAll(); fs.rmSync(directory, { recursive: true, force: true }); }
 });
 

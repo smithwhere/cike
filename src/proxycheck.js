@@ -115,7 +115,7 @@ async function readProxyNetwork(proxy, request = curl) {
     const geo = JSON.parse(await request(proxy, `https://ipwho.is/${encodeURIComponent(exitIp)}`));
     if (geo.success !== false && normalizeIp(geo.ip, net.isIP(exitIp)) === exitIp) {
       country = typeof geo.country === 'string' ? geo.country : null;
-      countryCode = /^[A-Z]{2}$/.test(geo.country_code) ? geo.country_code : null;
+      countryCode = typeof geo.country_code === 'string' && /^[A-Z]{2}$/.test(geo.country_code) ? geo.country_code : null;
       timezone = typeof geo.timezone?.id === 'string' ? geo.timezone.id : null;
       if (timezone) new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
     }
@@ -140,16 +140,18 @@ async function checkProxy(proxy, settings, preparedRoute, transport) {
 }
 
 async function checkDirectNetwork(request = fetch) {
-  const response = await request('https://ipwho.is/?fields=success,ip,timezone.id', {
+  const response = await request('https://ipwho.is/?fields=success,ip,country_code,timezone.id', {
     signal: AbortSignal.timeout(5000), cache: 'no-store', credentials: 'omit', redirect: 'error',
   });
-  if (!response.ok) throw new Error('公网出口时区查询失败');
+  if (!response.ok) throw new Error('公网出口地区查询失败');
   const result = await response.json();
   const addresses = exitAddresses({ exitIp: result?.ip });
-  const timezone = result?.timezone?.id;
-  if (result?.success !== true || !addresses.exitIp || typeof timezone !== 'string') throw new Error('公网出口时区查询响应无效');
-  new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
-  return { ...addresses, timezone };
+  if (result?.success !== true || !addresses.exitIp) throw new Error('公网出口地区查询响应无效');
+  const countryCode = typeof result.country_code === 'string' && /^[A-Z]{2}$/.test(result.country_code) ? result.country_code : null;
+  let timezone = typeof result.timezone?.id === 'string' && result.timezone.id ? result.timezone.id : null;
+  try { if (timezone) new Intl.DateTimeFormat('en', { timeZone: timezone }).format(); }
+  catch { timezone = null; }
+  return { ...addresses, countryCode, timezone };
 }
 
 module.exports = { checkProxy, checkDirectNetwork, prepareProxyRoute, openProxyTransport, readProxyNetwork, exitAddresses, curl };

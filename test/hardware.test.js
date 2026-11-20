@@ -266,19 +266,19 @@ test('two automatic creations persist fresh settings and keep manual creation av
       assert.equal(profile.audioNoise, false);
       assert.ok([4, 8, 16, 32].includes(profile.deviceMemory));
       assert.ok(agents.length ? agents.includes(profile.userAgent) : profile.userAgent === null);
-      assert.ok(LOCALES.includes(profile.locale));
+      assert.equal(profile.locale, 'auto');
       assert.equal(profile.timezone, 'ip');
       assert.equal(profile.webrtc, 'auto');
       const { options } = buildContextOptions(profile);
       assert.equal(options.extraHTTPHeaders, undefined);
-      assert.equal(options.locale, profile.locale);
+      assert.equal(options.locale, undefined);
       assert.equal(options.timezoneId, undefined);
       assert.deepEqual(options.viewport, profile.viewport);
       assert.equal(options.deviceScaleFactor, profile.deviceScaleFactor);
       assert.match(profile.fingerprintSeed, /^[a-f0-9]{32}$/);
       assert.deepEqual(reopened.get(profile.id), profile);
     }
-    for (const key of ['deviceMemory', 'hardwareConcurrency', 'locale', 'colorScheme', 'reducedMotion', 'contrast', 'forcedColors']) {
+    for (const key of ['deviceMemory', 'hardwareConcurrency', 'colorScheme', 'reducedMotion', 'contrast', 'forcedColors']) {
       assert.notEqual(first[key], second[key], key);
     }
     if (agents.length > 1) assert.notEqual(first.userAgent, second.userAgent);

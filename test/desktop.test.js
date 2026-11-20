@@ -11,6 +11,24 @@ const { NativeStorage, binary } = require('../src/native-storage');
 const { currentUserAgents, userAgentPresets } = require('../src/user-agents');
 const { BUILD } = require('../src/nativecore');
 
+test('the Windows package starts with an empty environment list in a fresh data directory',
+  { skip: process.platform !== 'win32' || !process.env.CIKE_TEST_APP, timeout: 60000 }, async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-empty-install-'));
+    let app;
+    try {
+      app = await _electron.launch({ executablePath: process.env.CIKE_TEST_APP,
+        env: { ...process.env, LFB_DATA: dir }, timeout: 30000 });
+      const page = await app.firstWindow();
+      await page.getByText('还没有环境，点击左侧「新建环境」创建一个。', { exact: true }).waitFor();
+      assert.equal(await page.locator('.env-card').count(), 0);
+      assert.equal(app.windows().length, 1);
+      assert.deepEqual(new ProfileStore(dir).list(), []);
+    } finally {
+      await app?.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
 test('sandboxed desktop UI can authenticate, migrate profiles and protect secrets with safeStorage', { timeout: 120000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cike-desktop-'));
   if (process.env.LFB_CHROMIUM_EXECUTABLE) {
@@ -331,7 +349,7 @@ test('sandboxed desktop UI can authenticate, migrate profiles and protect secret
       assert.ok([4, 8, 16, 32].includes(profile.deviceMemory));
       const agents = currentUserAgents(profile);
       assert.ok(agents.length ? agents.some(([, value]) => value === profile.userAgent) : profile.userAgent === null);
-      assert.notEqual(profile.locale, 'auto');
+      assert.equal(profile.locale, 'auto');
       assert.equal(profile.timezone, 'ip');
       assert.equal(JSON.parse(fs.readFileSync(profiles.file))[profile.id].fingerprintSeed, profile.fingerprintSeed);
     }

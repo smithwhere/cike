@@ -460,7 +460,7 @@ async function openProfileRegionModal(profile) {
       .map(value => `<option value="${esc(value)}" ${value === selected ? 'selected' : ''}>${esc(value)}</option>`).join('');
   };
   openModal('设置语言和时区', `
-    <div class="field"><label for="region-locale">语言</label><select id="region-locale" class="input">${choices(options.locales, profile.locale, ['auto'])}</select></div>
+    <div class="field"><label for="region-locale">备用语言</label><select id="region-locale" class="input">${choices(options.locales, profile.locale, ['auto'])}</select></div>
     <div class="field"><label for="region-timezone">时区</label><select id="region-timezone" class="input">${choices(options.timezones, profile.timezone, ['auto', 'ip'])}</select></div>
     <p class="hint" role="status"></p>
     <div class="modal-foot"><button class="btn" id="m-cancel">取消</button><button class="btn primary" id="m-save">保存</button></div>

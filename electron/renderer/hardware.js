@@ -1,5 +1,5 @@
 'use strict';
-const AUTOMATIC_REGION = '代理地区 / 无代理时跟随系统';
+const AUTOMATIC_TIMEZONE = '代理地区 / 无代理时跟随系统';
 const IP_TIMEZONE = '跟随出口 IP（启动时查询）';
 const COLOR_SCHEMES = { light: '浅色', dark: '深色', system: '跟随系统', 'no-preference': '无偏好（兼容）' };
 const MOTION_PREFERENCES = { 'no-preference': '无偏好', reduce: '减少动画', system: '跟随系统' };
@@ -36,16 +36,16 @@ async function mountHardware(root, prefix, profile = {}) {
   const locales = [...new Set(['auto', ...options.locales, profile.locale || 'auto'])];
   const selectedTimezone = profile.timezone || (creating ? 'ip' : 'auto');
   const timezones = [...new Set(['ip', 'auto', ...options.timezones, selectedTimezone])];
-  const regionLabel = value => value === 'auto' ? AUTOMATIC_REGION : value;
   const displays = options.displays;
   root.innerHTML = `
     <div class="field"><label for="${prefix}-fingerprint-mode">指纹策略</label><select id="${prefix}-fingerprint-mode" class="input">${creating ? '<option value="random" selected>每次创建随机生成（Chromium）</option>' : ''}<option value="native" ${!creating && !simulated ? 'selected' : ''}>原生一致（Chromium）</option><option value="kernel" ${kernel ? 'selected' : ''}>内核模拟（Camoufox / Firefox）</option><option value="hardware" ${hardware ? 'selected' : ''}>硬件模拟（软件层，可被检测）</option></select></div>
-    ${creating ? `<p id="${prefix}-random-hint" class="hint">创建时抽取 CPU、内存、可用的 UA 和显卡预设、窗口尺寸与缩放、语言和网页偏好，并生成 Canvas 种子。时区在打开时按出口 IP 选择。音频、插件和字体使用原生读数。</p>` : ''}
+    ${creating ? `<p id="${prefix}-random-hint" class="hint">创建时抽取 CPU、内存、可用的 UA 和显卡预设、窗口尺寸与缩放和网页偏好，并生成 Canvas 种子。语言和时区在打开时按出口 IP 选择。音频、插件和字体使用原生读数。</p>` : ''}
     <div id="${prefix}-preferences">
     <div class="field-row">
-      <div class="field"><label for="${prefix}-locale">语言</label><select id="${prefix}-locale" class="input">${choices(locales, profile.locale || 'auto', regionLabel)}</select></div>
-      <div class="field"><label for="${prefix}-tz">时区</label><select id="${prefix}-tz" class="input">${choices(timezones, selectedTimezone, value => value === 'ip' ? IP_TIMEZONE : regionLabel(value))}</select></div>
+      <div class="field"><label for="${prefix}-locale">备用语言</label><select id="${prefix}-locale" class="input">${choices(locales, profile.locale || 'auto', value => value === 'auto' ? '自动' : value)}</select></div>
+      <div class="field"><label for="${prefix}-tz">时区</label><select id="${prefix}-tz" class="input">${choices(timezones, selectedTimezone, value => value === 'ip' ? IP_TIMEZONE : value === 'auto' ? AUTOMATIC_TIMEZONE : value)}</select></div>
     </div>
+    <p class="hint">环境打开时按出口 IP 选择语言。地区无法识别时才使用备用语言。</p>
     <div class="field-row">
       <div class="field"><label for="${prefix}-color-scheme">网页外观</label><select id="${prefix}-color-scheme" class="input">${choices(Object.keys(COLOR_SCHEMES), mediaValue(profile.colorScheme, 'light'), value => COLOR_SCHEMES[value])}</select></div>
       <div class="field"><label for="${prefix}-reduced-motion">网页动画偏好</label><select id="${prefix}-reduced-motion" class="input">${choices(Object.keys(MOTION_PREFERENCES), mediaValue(profile.reducedMotion, 'no-preference'), value => MOTION_PREFERENCES[value])}</select></div>

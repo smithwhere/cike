@@ -7,7 +7,6 @@ const { privateDirectory, readJSON, writeJSON, credentials } = require('./privat
 const { validateInlineProxy } = require('./proxyconfig');
 const { GPU_PRESETS, completeHardware, generateHardware, isGpuPresetAllowed } = require('./hardware');
 const { randomWindowOptions } = require('./display-presets');
-const { REGION_PRESETS } = require('./localemap');
 const { resolveUserAgent } = require('./user-agents');
 
 const DEFAULT_SPEC = {
@@ -24,13 +23,8 @@ const pick = value => Object.fromEntries(Object.keys(DEFAULT_SPEC).filter(k => O
 function generateRandomProfile(spec, previous, workArea) {
   const choose = values => values[crypto.randomInt(values.length)];
   const window = randomWindowOptions(HOST_PLATFORM, previous?.display, workArea);
-  const region = {};
-  if (spec.locale === undefined && spec.timezone === undefined) {
-    [region.locale] = choose(REGION_PRESETS);
-  }
   return {
     ...window,
-    ...region,
     timezone: 'ip',
     colorScheme: choose(['light', 'dark']),
     reducedMotion: choose(['no-preference', 'reduce']),

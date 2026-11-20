@@ -102,7 +102,7 @@ class BrowserManager {
     checkRoute();
     const effective = { ...profile };
     let network = { route: proxyRecord ? 'proxy' : 'system', ...exitAddresses({}) };
-    let forwarder, context, windowToken, windowBridge, windowControl, graphicsMode, timezoneWarning, graphicsFallback = false;
+    let forwarder, context, windowToken, windowBridge, windowControl, graphicsMode, timezoneWarning, languageWarning, graphicsFallback = false;
     const trackContext = launched => {
       this.contexts.set(id, launched);
       const process = ownedBrowser(launched)?.process;
@@ -122,24 +122,29 @@ class BrowserManager {
           status: 502, proxyCode: result.code || 'PROXY_EXIT',
         });
         if (isAutomaticTimezone(profile.timezone)) effective.timezone = result.timezone;
-        if (profile.locale === 'auto') effective.locale = localeForCountry(result.countryCode);
+        const exitLocale = localeForCountry(result.countryCode);
+        if (exitLocale) effective.locale = exitLocale;
+        else effective.locale = profile.locale === 'auto' ? null : profile.locale;
         const missing = [
           !effective.locale && (result.countryCode ? '代理出口地区没有对应的语言' : '代理出口地区未知'),
           !effective.timezone && '代理出口时区未知',
         ].filter(Boolean);
         if (missing.length) throw Object.assign(new Error(`出口 IP 已验证，但${missing.join('、')}。请重试或手动选择语言和时区。`),
           { status: 409, proxyCode: 'PROXY_REGION' });
+        if (!exitLocale) languageWarning = `未能确定出口对应的语言，本次使用备用语言 ${profile.locale}`;
         network = { route: 'proxy', ...exitAddresses(result), checkedAt: new Date().toISOString(), timezone: effective.timezone, locale: effective.locale };
-      } else if (profile.timezone === 'ip') {
+      } else {
         const result = await this.checkDirectNetwork().catch(() => null);
         checkRoute();
-        if (result) {
-          effective.timezone = result.timezone;
-          network = { route: 'system', ...exitAddresses(result), checkedAt: new Date().toISOString(), timezone: effective.timezone };
-        } else {
-          effective.timezone = 'auto';
-          timezoneWarning = '公网出口时区查询失败，本次使用系统时区';
+        const exitLocale = localeForCountry(result?.countryCode);
+        if (exitLocale) effective.locale = exitLocale;
+        else languageWarning = profile.locale === 'auto' ? '未能确定出口对应的语言，本次使用系统语言'
+          : `未能确定出口对应的语言，本次使用备用语言 ${profile.locale}`;
+        if (profile.timezone === 'ip') {
+          effective.timezone = result?.timezone || 'auto';
+          if (!result?.timezone) timezoneWarning = '公网出口时区查询失败，本次使用系统时区';
         }
+        if (result) network = { route: 'system', ...exitAddresses(result), checkedAt: new Date().toISOString(), timezone: effective.timezone, locale: effective.locale };
       }
       const proxy = ProxyStore.toPlaywright(transport.proxy);
       if (proxy) proxy.bypass = '<-loopback>';
@@ -273,6 +278,7 @@ class BrowserManager {
       const warning = [
         effective.display?.scale !== profile.display?.scale ? `本次显示缩放已自动调整为 ${effective.display.scale}%` : null,
         timezoneWarning,
+        languageWarning,
         graphicsFallback ? '检测到 GPU/D3D11 启动失败，已自动使用兼容绘制' : null,
         this.windowWarning(id),
       ].filter(Boolean).join('；');
