@@ -117,16 +117,17 @@ class BrowserManager {
         const result = await this.checkProxy(proxyRecord, this.settings, route, transport);
         checkRoute();
         savedProxy?.save(result);
-        if (result.status !== 'ok') throw Object.assign(new Error(result.error || '代理连接失败，已阻止启动'), { status: 502 });
-        if (isAutomaticTimezone(profile.timezone)) {
-          if (!result.timezone) throw Object.assign(new Error('代理出口时区未知，请重新检测或手动选择时区；不会回退到本机时区'), { status: 409 });
-          effective.timezone = result.timezone;
-        }
-        if (profile.locale === 'auto') {
-          if (!result.countryCode) throw Object.assign(new Error('代理出口地区未知，请重新检测或手动选择语言'), { status: 409 });
-          effective.locale = localeForCountry(result.countryCode);
-          if (!effective.locale) throw Object.assign(new Error('没有此代理地区的语言映射，请手动选择语言'), { status: 409 });
-        }
+        if (result.status !== 'ok') throw Object.assign(new Error(result.error || '代理检测失败，已阻止启动'), {
+          status: 502, proxyCode: result.code || 'PROXY_EXIT',
+        });
+        if (isAutomaticTimezone(profile.timezone)) effective.timezone = result.timezone;
+        if (profile.locale === 'auto') effective.locale = localeForCountry(result.countryCode);
+        const missing = [
+          !effective.locale && (result.countryCode ? '代理出口地区没有对应的语言' : '代理出口地区未知'),
+          !effective.timezone && '代理出口时区未知',
+        ].filter(Boolean);
+        if (missing.length) throw Object.assign(new Error(`出口 IP 已验证，但${missing.join('、')}。请重试或手动选择语言和时区。`),
+          { status: 409, proxyCode: 'PROXY_REGION' });
         network = { route: 'proxy', ...exitAddresses(result), checkedAt: new Date().toISOString(), timezone: effective.timezone, locale: effective.locale };
       } else if (profile.timezone === 'ip') {
         const result = await this.checkDirectNetwork().catch(() => null);

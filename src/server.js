@@ -99,7 +99,7 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
       await next();
     } catch (err) {
       ctx.status = err.status || 500;
-      ctx.body = { ok: false, error: err.message };
+      ctx.body = { ok: false, error: err.message, ...(err.proxyCode && { code: err.proxyCode }) };
     }
   });
 
@@ -328,7 +328,7 @@ function buildBackend(dataDir = DATA_DIR, options = {}) {
         if (!check.save(result)) ctx.throw(409, '代理配置或最新检测已变化，请重新检测');
         results.push({ id, ...result });
       } catch (error) {
-        results.push({ id, status: 'failed', error: error.message });
+        results.push({ id, status: 'failed', error: error.message, ...(error.proxyCode && { code: error.proxyCode }) });
       }
     }
     ctx.body = { ok: true, results };

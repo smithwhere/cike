@@ -219,6 +219,7 @@ textarea.input { width: 100%; min-height: 110px; font-family: ui-monospace, SFMo
 .pill.open, .pill.ok { background: var(--green-bg); color: var(--green); }
 .pill.closed, .pill.unchecked { background: var(--line-soft); color: var(--muted); }
 .pill.failed { background: var(--red-bg); color: var(--red); }
+.pill.warning { background: var(--amber-bg); color: var(--amber); }
 .sub { color: var(--muted); font-size: 11px; }
 
 /* 设置卡片 */
@@ -233,6 +234,8 @@ textarea.input { width: 100%; min-height: 110px; font-family: ui-monospace, SFMo
 .hint code { background: var(--line-soft); padding: 1px 7px; border-radius: 5px; font-size: 11px; }
 .storage-path { font-size: 12px; overflow-wrap: anywhere; color: var(--ink-soft); }
 .environment-window-warning { font-size: 11px; color: var(--muted); }
+.environment-proxy-failure { grid-column: 1 / -1; font-size: 12px; color: var(--red); }
+.environment-proxy-failure .link-btn { margin-inline-start: 6px; }
 .storage-actions { flex-wrap: wrap; margin-top: 10px; }
 .native-storage-list { display: grid; gap: 10px; }
 .native-storage-entry { border: 1px solid var(--line); border-radius: 6px; padding: 10px; }

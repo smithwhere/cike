@@ -4,6 +4,7 @@
 const VIEWPORTS = ['1440x900', '1366x768', '1536x864', '1920x1080', '1280x800', '2560x1440', '1280x720', '1600x900', '1680x1050', '1920x1200', '2560x1080'];
 
 const selectedProfiles = new Set(), selectedProxies = new Set();
+const proxyOpenFailures = new Map();
 let batchBusy = false;
 const state = { profiles: [], proxies: [], chromium: null, nativeCore: null, page: 'profiles', activeGroup: '', profilePage: 0, proxyPage: 0 };
 
@@ -17,7 +18,7 @@ async function api(path, opts = {}) {
     headers: { 'Content-Type': 'application/json', 'X-API-Token': token(), ...(opts.headers || {}) },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok || data.ok === false) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { code: data.code });
   return data;
 }
 
@@ -36,6 +37,11 @@ function esc(s) {
 
 function formatExitIps({ exitIPv4, exitIPv6, exitIp }) {
   return [exitIPv4 && `IPv4 ${exitIPv4}`, exitIPv6 && `IPv6 ${exitIPv6}`].filter(Boolean).join(' · ') || exitIp || '';
+}
+
+function formatProxyResult(result) {
+  if (result?.status !== 'ok') return result?.error || '未收到代理检测结果';
+  return [formatExitIps(result), result.country, result.timezone, result.warning].filter(Boolean).join(' · ');
 }
 
 function openModal(title, bodyHtml, onMount) {
@@ -134,13 +140,13 @@ async function autoCheckNewProxy(manual = false) {
     // Restore selection after refresh
     document.getElementById('n-proxy').value = pid;
     if (res?.status === 'ok') {
-      resultEl.textContent = '✓ ' + [formatExitIps(res), res.country, res.timezone].filter(Boolean).join(' · ');
-      resultEl.style.color = 'var(--green)';
+      resultEl.textContent = formatProxyResult(res);
+      resultEl.style.color = res.warning ? 'var(--amber)' : 'var(--green)';
       return res;
     } else {
-      resultEl.textContent = '✗ 代理检测失败：' + (res?.error || '未知错误') + '——请检查代理是否可用';
+      resultEl.textContent = formatProxyResult(res);
       resultEl.style.color = 'var(--red)';
-      if (manual) toast('代理检测失败，请检查代理设置', true);
+      if (manual) toast(resultEl.textContent, true);
       return null;
     }
   } catch (err) {
@@ -209,11 +215,25 @@ async function openProfileWithCheck(profileId) {
   if (!['native', 'hardware', 'kernel'].includes(p.fingerprintMode)) { toast('请先在编辑中转换旧环境；站点数据会保留', true); return; }
   if (p.proxyId || p.proxy) toast('正在验证代理，失败将阻止打开…');
   try {
-    const result = await api('/api/openBrowser', { method: 'POST', body: JSON.stringify({ profile_id: profileId }) });
+    const result = await requestOpenProfile(profileId);
     toast(result.warning ? '环境已打开：' + result.warning : '环境已打开');
     await loadProfiles();
   } catch (err) {
     toast('打开失败：' + err.message, true);
+    renderProfiles();
+  }
+}
+
+async function requestOpenProfile(id) {
+  const updatedAt = state.profiles.find(p => p.id === id)?.updatedAt;
+  proxyOpenFailures.delete(id);
+  try {
+    return await api('/api/openBrowser', { method: 'POST', body: JSON.stringify({ profile_id: id }) });
+  } catch (error) {
+    if (typeof error.code === 'string' && error.code.startsWith('PROXY_')) {
+      proxyOpenFailures.set(id, { code: error.code, message: error.message, updatedAt });
+    }
+    throw error;
   }
 }
 
@@ -222,6 +242,7 @@ async function loadProfiles() {
     const { profiles } = await api('/api/profiles');
     state.profiles = profiles;
     for (const id of selectedProfiles) if (!profiles.some(p => p.id === id)) selectedProfiles.delete(id);
+    for (const id of proxyOpenFailures.keys()) if (!profiles.some(p => p.id === id)) proxyOpenFailures.delete(id);
     renderProfiles();
   } catch (e) { toast('加载环境失败：' + e.message, true); }
 }
@@ -271,7 +292,10 @@ function renderProfiles() {
   const start = state.profilePage * PAGE_SIZE;
   const pageRows = rows.slice(start, start + PAGE_SIZE);
 
-  list.innerHTML = pageRows.map((p) => `
+  list.innerHTML = pageRows.map((p) => {
+    const failure = proxyOpenFailures.get(p.id);
+    const showFailure = failure && !p.open && !p.deleting && failure.updatedAt === p.updatedAt;
+    return `
     <div class="env-card ${p.open ? 'running' : ''}">
       <input type="checkbox" class="profile-sel" value="${p.id}" aria-label="选择环境 ${esc(p.name)}" ${selectedProfiles.has(p.id) ? 'checked' : ''}>
       <span class="environment-number">${esc(p.sequence)}</span>
@@ -296,16 +320,24 @@ function renderProfiles() {
           <div><span class="environment-label">创建时间</span> <span class="environment-time">${formatTime(p.createdAt)}</span></div>
           <div><span class="environment-label">最后打开</span> <span class="environment-time">${formatTime(p.lastOpenedAt)}</span></div>
         </div>
+        ${showFailure ? `<div class="environment-proxy-failure">
+          <span role="status">${esc(failure.message)}</span>
+          ${failure.code === 'PROXY_REGION' ? `<button class="link-btn" data-act="fix-region" data-id="${p.id}">设置语言和时区</button>` :
+            failure.code === 'PROXY_ROUTE' ? '<button class="link-btn" data-act="proxy-settings">打开代理设置</button>' :
+            ['PROXY_AUTH', 'PROXY_CONNECTION', 'PROXY_CONFIG'].includes(failure.code) ?
+              `<button class="link-btn" data-act="fix-proxy" data-id="${p.id}">编辑代理</button>` : ''}
+        </div>` : ''}
       </div>
       <div class="actions">
         ${p.deleting ? '' : p.open
           ? `<button class="link-btn" data-act="close" data-id="${p.id}">${p.phase === 'opening' ? '取消启动' : '关闭'}</button>`
-          : `<button class="link-btn" data-act="open" data-id="${p.id}">打开</button>`}
+          : `<button class="link-btn" data-act="open" data-id="${p.id}">${showFailure ? '重试打开' : '打开'}</button>`}
         ${p.phase === 'open' ? `<button class="link-btn" data-act="permissions" data-id="${p.id}">网站权限</button>` : ''}
         ${p.deleting ? '' : `<button class="link-btn" data-act="edit" data-id="${p.id}">编辑</button>`}
         <button class="link-btn danger" data-act="del" data-id="${p.id}">${p.deleting ? '重试删除' : '删除'}</button>
       </div>
-    </div>`).join('') + (totalPages > 1 ? renderPagination(state.profilePage, totalPages, 'profile') : '');
+    </div>`;
+  }).join('') + (totalPages > 1 ? renderPagination(state.profilePage, totalPages, 'profile') : '');
   renderSideGroups();
 }
 
@@ -351,6 +383,20 @@ async function handleProfileAction(act, id, btn) {
       await api('/api/closeBrowser', { method: 'POST', body: JSON.stringify({ profile_id: id }) });
     } else if (act === 'proxy') {
       await openEnvironmentProxy(state.profiles.find(p => p.id === id));
+      return;
+    } else if (act === 'fix-proxy') {
+      const profile = state.profiles.find(p => p.id === id);
+      await loadProxies();
+      const proxy = state.proxies.find(p => p.id === profile?.proxyId);
+      if (proxy) openProxyEditModal(proxy);
+      else await openEnvironmentProxy(profile, false);
+      return;
+    } else if (act === 'fix-region') {
+      await openProfileRegionModal(state.profiles.find(p => p.id === id));
+      return;
+    } else if (act === 'proxy-settings') {
+      showPage('settings');
+      document.getElementById('set-socks-system-proxy').focus();
       return;
     } else if (act === 'permissions') {
       await api('/api/profiles/' + id + '/sitePermissions', { method: 'POST', body: '{}' });
@@ -403,6 +449,39 @@ function proxyOptionsHtml(selectedId) {
   const opts = [`<option value="">不使用代理</option>`, ...(selectedId && selectedId !== '__custom' && !state.proxies.some(x => x.id === selectedId) ? [`<option value="${esc(selectedId)}" selected>原代理已删除 · 请重新绑定</option>`] : [])]
     .concat(state.proxies.map((x) => `<option value="${x.id}" ${x.id === selectedId ? 'selected' : ''}>${esc(x.remark)} (${esc(x.type)}://${esc(x.host)}:${x.port})</option>`));
   return `<optgroup label="已保存的代理">${opts.join('')}</optgroup><option value="__custom" ${selectedId === '__custom' ? 'selected' : ''}>自定义…</option>`;
+}
+
+async function openProfileRegionModal(profile) {
+  if (!profile) return;
+  const options = await api('/api/fingerprints/options');
+  const choices = (values, current, automatic) => {
+    const selected = automatic.includes(current) ? '' : current;
+    return '<option value="">请选择</option>' + [...new Set([...values, ...(selected ? [selected] : [])])]
+      .map(value => `<option value="${esc(value)}" ${value === selected ? 'selected' : ''}>${esc(value)}</option>`).join('');
+  };
+  openModal('设置语言和时区', `
+    <div class="field"><label for="region-locale">语言</label><select id="region-locale" class="input">${choices(options.locales, profile.locale, ['auto'])}</select></div>
+    <div class="field"><label for="region-timezone">时区</label><select id="region-timezone" class="input">${choices(options.timezones, profile.timezone, ['auto', 'ip'])}</select></div>
+    <p class="hint" role="status"></p>
+    <div class="modal-foot"><button class="btn" id="m-cancel">取消</button><button class="btn primary" id="m-save">保存</button></div>
+  `, (body, close) => {
+    const locale = body.querySelector('#region-locale'), timezone = body.querySelector('#region-timezone');
+    const status = body.querySelector('[role="status"]'), save = body.querySelector('#m-save');
+    (locale.value ? timezone : locale).focus();
+    body.querySelector('#m-cancel').onclick = close;
+    save.onclick = async () => {
+      if (!locale.value || !timezone.value) { status.textContent = '请选择具体的语言和时区。'; return; }
+      save.disabled = true;
+      try {
+        await api('/api/profiles/' + profile.id, { method: 'PATCH', body: JSON.stringify({ locale: locale.value, timezone: timezone.value }) });
+        proxyOpenFailures.delete(profile.id);
+        close();
+        await loadProfiles();
+        toast('语言和时区已保存，可以重新打开环境');
+      } catch (error) { status.textContent = error.message; }
+      finally { save.disabled = false; }
+    };
+  });
 }
 
 function openProfileModal(existing) {
@@ -485,15 +564,9 @@ function openProfileModal(existing) {
           body: JSON.stringify({ ids: [pid] }),
         });
         const res = r.results?.[0];
-        if (res?.status === 'ok') {
-          resultEl.textContent = `✓ ${formatExitIps(res)} · ${res.country || ''} · ${res.timezone || ''}`;
-          resultEl.style.color = 'var(--green)';
-          // Refresh proxy list so timezone/country are current
-          await loadProxies();
-        } else {
-          resultEl.textContent = '✗ 检测失败：' + (res?.error || '未知错误');
-          resultEl.style.color = 'var(--red)';
-        }
+        resultEl.textContent = formatProxyResult(res);
+        resultEl.style.color = res?.status !== 'ok' ? 'var(--red)' : res.warning ? 'var(--amber)' : 'var(--green)';
+        await loadProxies();
       } catch (err) {
         resultEl.textContent = '✗ ' + err.message;
         resultEl.style.color = 'var(--red)';
@@ -547,8 +620,12 @@ async function loadProxies() {
 }
 
 function statusPill(x) {
-  if (x.status === 'ok') return `<span class="pill ok">正常</span>`;
-  if (x.status === 'failed') return `<span class="pill failed">失败</span>`;
+  if (x.status === 'ok') return x.countryCode && x.timezone ? '<span class="pill ok">正常</span>' : '<span class="pill warning">出口已验证 · 地区信息不完整</span>';
+  if (x.status === 'failed') {
+    const label = { PROXY_AUTH: '认证失败', PROXY_CONNECTION: '连接失败', PROXY_EXIT: '出口检测失败',
+      PROXY_ROUTE: '系统代理不可用', PROXY_RUNTIME: '检测组件不可用' }[x.checkCode];
+    return `<span class="pill failed">${esc(label || '检测失败')}</span>`;
+  }
   return `<span class="pill unchecked">未检测</span>`;
 }
 
@@ -605,7 +682,8 @@ document.getElementById('proxies-list').addEventListener('click', async (e) => {
   try {
     if (act === 'check') {
       toast('正在检测…');
-      await api('/api/proxies/check', { method: 'POST', body: JSON.stringify({ ids: [id] }) });
+      const { results } = await api('/api/proxies/check', { method: 'POST', body: JSON.stringify({ ids: [id] }) });
+      toast(formatProxyResult(results[0]), results[0]?.status !== 'ok');
     } else if (act === 'del') {
       if (!confirm('删除这条代理？')) return;
       await api('/api/proxies/' + id, { method: 'DELETE' });
@@ -673,7 +751,9 @@ function openProxyEditModal(x) {
       if (pw) patch.password = pw;
       try {
         await api('/api/proxies/' + x.id, { method: 'PATCH', body: JSON.stringify(patch) });
+        for (const profile of state.profiles) if (profile.proxyId === x.id) proxyOpenFailures.delete(profile.id);
         close(); toast('已保存'); await loadProxies();
+        renderProfiles();
       } catch (e) { toast(e.message, true); }
     };
   });
@@ -685,9 +765,11 @@ document.getElementById('btn-check-proxies').onclick = async (e) => {
   e.target.disabled = true;
   try {
     toast(`正在检测 ${ids.length} 条代理…`);
-    await api('/api/proxies/check', { method: 'POST', body: JSON.stringify({ ids }) });
+    const { results } = await api('/api/proxies/check', { method: 'POST', body: JSON.stringify({ ids }) });
+    const verified = results.filter(result => result.status === 'ok').length;
+    const incomplete = results.filter(result => result.warning).length;
     await loadProxies();
-    toast('检测完成');
+    toast(`出口已验证 ${verified}/${results.length} 条${incomplete ? `，其中 ${incomplete} 条地区信息不完整` : ''}`, verified < results.length);
   } catch (err) { toast(err.message, true); }
   finally { e.target.disabled = false; }
 };
@@ -735,7 +817,7 @@ async function runBatch(type, action) {
     for (const id of ids) {
       try {
         if (action === 'open') {
-          await api('/api/openBrowser', { method: 'POST', body: JSON.stringify({ profile_id: id }) });
+          await requestOpenProfile(id);
         } else {
           await api('/api/' + (type === 'profile' ? 'profiles/' : 'proxies/') + id, { method: 'DELETE' });
         }
