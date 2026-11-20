@@ -14,14 +14,14 @@ const TEST_QUERY = 'AAABAAABAAAAAAAAB2V4YW1wbGUDY29tAAABAAE';
 
 function canReachProvider({ ip, url }) {
   return new Promise((resolve, reject) => {
+    const endpoint = new URL(url);
     https.get(`${url}?dns=${TEST_QUERY}`, {
       agent: false,
+      hostname: ip,
+      servername: endpoint.hostname,
+      family: 4,
       signal: AbortSignal.timeout(1800),
       headers: { Accept: 'application/dns-message' },
-      lookup: (_hostname, options, done) => {
-        if (options.all) done(null, [{ address: ip, family: 4 }]);
-        else done(null, ip, 4);
-      },
     }, response => {
       response.on('error', () => resolve(false));
       response.resume();
